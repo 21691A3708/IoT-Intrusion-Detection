@@ -1,0 +1,2 @@
+Model,Accuracy,Precision,Recall,F1,ROC_AUC,FPR,TrainingSeconds,PredictionSeconds,TN,FP,FN,TP
+Random Forest,1.0,1.0,1.0,1.0,1.0,0.0,9.099094399993191,0.10373729999992065,72169,0,0,36647

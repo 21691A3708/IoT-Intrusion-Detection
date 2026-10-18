@@ -1,0 +1,3 @@
+Capture,ActualClass,Records,Accuracy,Precision,Recall,F1,TN,FP,FN,TP
+BenignTraffic2.pcap.csv,0,310395,1.0,0.0,0.0,0.0,310395,0,0,0
+DoS-UDP_Flood2.pcap.csv,1,102874,0.9999708381126426,1.0,0.9999708381126426,0.9999854188437143,0,0,3,102871

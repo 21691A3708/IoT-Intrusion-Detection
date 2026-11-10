@@ -1,0 +1,118 @@
+<section class="form-section">
+  <div class="section-header">
+    <div class="heading-content">
+      <div class="heading-icon">＋</div>
+      <div>
+        <h2>Register IoT Device</h2>
+        <p>Add and configure a new device in your IoT monitoring network.</p>
+      </div>
+    </div>
+
+    <span class="form-tag">
+      <span class="tag-dot"></span>
+      Device Enrollment
+    </span>
+  </div>
+
+  <form (ngSubmit)="registerDevice()">
+    <div class="form-intro">
+      <h3>Device Information</h3>
+      <p>Enter the device details below. Fields marked with * are required.</p>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="deviceName">Device Name <span>*</span></label>
+        <input
+          id="deviceName"
+          type="text"
+          name="deviceName"
+          [(ngModel)]="deviceName"
+          placeholder="e.g. Temperature Sensor 01"
+          autocomplete="off"
+          required
+        />
+        <small>A recognizable name for your IoT device.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="deviceIdentifier">Device Identifier <span>*</span></label>
+        <input
+          id="deviceIdentifier"
+          type="text"
+          name="deviceIdentifier"
+          [(ngModel)]="deviceIdentifier"
+          placeholder="e.g. IOT-DEVICE-001"
+          autocomplete="off"
+          required
+        />
+        <small>Must be unique for each registered device.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="deviceType">Device Type <span>*</span></label>
+        <select id="deviceType" name="deviceType" [(ngModel)]="deviceType" required>
+          <option value="temperature_sensor">Temperature Sensor</option>
+          <option value="humidity_sensor">Humidity Sensor</option>
+          <option value="motion_sensor">Motion Sensor</option>
+          <option value="smart_camera">Smart Camera</option>
+          <option value="smart_meter">Smart Meter</option>
+          <option value="other">Other</option>
+        </select>
+        <small>Select the category that best describes the device.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="deviceLocation">Device Location</label>
+        <input
+          id="deviceLocation"
+          type="text"
+          name="deviceLocation"
+          [(ngModel)]="deviceLocation"
+          placeholder="e.g. Laboratory"
+        />
+        <small>Optional physical location of the device.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="deviceStatus">Initial Device Status</label>
+        <select id="deviceStatus" name="deviceStatus" [(ngModel)]="deviceStatus">
+          <option value="online">Online</option>
+          <option value="offline">Offline</option>
+          <option value="unknown">Unknown</option>
+          <option value="quarantined">Quarantined</option>
+        </select>
+        <small>Choose the initial status for this device.</small>
+      </div>
+    </div>
+
+    <div class="form-footer">
+      <div class="required-note"><span>*</span> Required fields</div>
+
+      <button type="submit" [disabled]="savingDevice()">
+        @if (savingDevice()) {
+          <span class="button-spinner"></span>
+          Registering Device...
+        } @else {
+          <span class="button-icon">＋</span>
+          Register Device
+        }
+      </button>
+    </div>
+
+    @if (deviceMessage()) {
+      <div
+        class="device-message"
+        [class.success]="deviceMessageType() === 'success'"
+        [class.error]="deviceMessageType() === 'error'"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="message-icon">
+          {{ deviceMessageType() === 'success' ? '✓' : '!' }}
+        </span>
+        {{ deviceMessage() }}
+      </div>
+    }
+  </form>
+</section>

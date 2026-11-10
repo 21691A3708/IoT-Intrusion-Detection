@@ -1,0 +1,176 @@
+<section class="detection-section">
+  <div class="section-header">
+    <div class="heading-content">
+      <div class="heading-icon">⌁</div>
+      <div>
+        <h2>Network Traffic Detection</h2>
+        <p>
+          Analyze IoT network traffic using the trained Random Forest intrusion detection model.
+        </p>
+      </div>
+    </div>
+
+    <div class="model-status">
+      <span class="status-dot"></span>
+      Random Forest Model
+    </div>
+  </div>
+
+  <div class="detection-info">
+    <div class="info-icon">ⓘ</div>
+    <div>
+      <strong>Traffic Analysis</strong>
+      <p>
+        Provide the 36 required traffic features in JSON format. The system will analyze the input
+        and calculate its attack probability and risk level.
+      </p>
+    </div>
+  </div>
+
+  <div class="detection-card">
+    <div class="card-heading">
+      <div>
+        <h3>Traffic Feature Input</h3>
+        <p>Enter the network traffic data you want to analyze.</p>
+      </div>
+      <span class="input-format">JSON FORMAT</span>
+    </div>
+
+    <form (ngSubmit)="detectTraffic()">
+      <div class="form-group">
+        <label for="trafficJson">
+          Traffic Features
+          <span class="required-label">Required</span>
+        </label>
+
+        <textarea
+          id="trafficJson"
+          name="trafficJson"
+          [(ngModel)]="trafficJson"
+          rows="18"
+          placeholder='{
+  "Header_Length": 0,
+  "Protocol Type": 0,
+  "Time_To_Live": 0,
+  "Rate": 0
+}'
+          spellcheck="false"
+          autocomplete="off"
+          required
+        ></textarea>
+
+        <div class="input-footer">
+          <span>Enter valid JSON containing all 36 model features.</span>
+          <span>Expected input: JSON object</span>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <div class="security-note">
+          <span class="security-icon">✓</span>
+          Analysis powered by your trained ML model
+        </div>
+
+        <button type="submit" [disabled]="submitting()">
+          @if (submitting()) {
+            <span class="button-spinner"></span>
+            Analyzing Traffic...
+          } @else {
+            <span class="button-icon">⌕</span>
+            Detect Intrusion
+          }
+        </button>
+      </div>
+    </form>
+  </div>
+
+  @if (errorMessage()) {
+    <div class="error-message">
+      <span class="message-icon">!</span>
+      <div>
+        <strong>Detection Failed</strong>
+        <p>{{ errorMessage() }}</p>
+      </div>
+    </div>
+  }
+
+  @if (result(); as prediction) {
+    <div class="result-section">
+      <div class="result-heading">
+        <div>
+          <h3>Detection Results</h3>
+          <p>Machine learning analysis completed successfully.</p>
+        </div>
+        <span class="result-complete">✓ Analysis Complete</span>
+      </div>
+
+      <div
+        class="result-card"
+        [class.attack-result]="prediction.predicted_label === 1"
+        [class.normal-result]="prediction.predicted_label === 0"
+      >
+        <div class="prediction-banner">
+          <div class="prediction-symbol">
+            {{ prediction.predicted_label === 1 ? '!' : '✓' }}
+          </div>
+
+          <div class="prediction-content">
+            <span>CLASSIFICATION RESULT</span>
+            <strong>{{ prediction.prediction | uppercase }}</strong>
+            <p>
+              {{
+                prediction.predicted_label === 1
+                  ? 'Potential malicious network traffic detected.'
+                  : 'Network traffic classified as normal.'
+              }}
+            </p>
+          </div>
+
+          <span class="prediction-badge">
+            {{ prediction.prediction | uppercase }}
+          </span>
+        </div>
+
+        <div class="result-metrics">
+          <div class="metric-card">
+            <span class="metric-label">Attack Probability</span>
+            <strong> {{ (prediction.attack_probability * 100).toFixed(2) }}% </strong>
+
+            <div class="probability-track">
+              <div
+                class="probability-fill"
+                [style.width.%]="prediction.attack_probability * 100"
+              ></div>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <span class="metric-label">Risk Level</span>
+            <strong
+              class="risk-value"
+              [class.low]="prediction.risk_level === 'low'"
+              [class.medium]="prediction.risk_level === 'medium'"
+              [class.high]="prediction.risk_level === 'high'"
+              [class.critical]="prediction.risk_level === 'critical'"
+            >
+              {{ prediction.risk_level | uppercase }}
+            </strong>
+            <span class="metric-description">Calculated risk classification</span>
+          </div>
+        </div>
+
+        <div class="result-details">
+          <div class="detail-item">
+            <span>Model Version</span>
+            <strong>{{ prediction.model_version }}</strong>
+          </div>
+
+          <div class="detail-item">
+            <span>Prediction ID</span>
+            <strong class="prediction-id">{{ prediction.id }}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</section>

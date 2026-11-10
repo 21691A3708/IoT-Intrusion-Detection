@@ -1,0 +1,297 @@
+<div class="dashboard-layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">⬡</div>
+      <div>
+        <h2>NIDS</h2>
+        <span>Security Center</span>
+      </div>
+    </div>
+
+    <div class="sidebar-menu">
+      <span class="menu-heading">MAIN MENU</span>
+
+      <nav>
+        <button
+          type="button"
+          class="nav-link"
+          [class.active]="isActive('dashboard')"
+          (click)="navigateTo('dashboard')"
+        >
+          <span class="nav-icon">⌂</span>
+          <span>Dashboard</span>
+        </button>
+
+        <button
+          type="button"
+          class="nav-link"
+          [class.active]="isActive('alerts')"
+          (click)="navigateTo('alerts')"
+        >
+          <span class="nav-icon">⚠</span>
+          <span>Alerts</span>
+        </button>
+
+        <button
+          type="button"
+          class="nav-link"
+          [class.active]="isActive('devices')"
+          (click)="navigateTo('devices')"
+        >
+          <span class="nav-icon">▣</span>
+          <span>Devices</span>
+        </button>
+
+        <button
+          type="button"
+          class="nav-link"
+          [class.active]="isActive('traffic')"
+          (click)="navigateTo('traffic')"
+        >
+          <span class="nav-icon">⌁</span>
+          <span>Traffic Monitor</span>
+        </button>
+
+        <button
+          type="button"
+          class="nav-link"
+          [class.active]="isActive('analysis')"
+          (click)="navigateTo('analysis')"
+        >
+          <span class="nav-icon">◈</span>
+          <span>Explainable AI</span>
+        </button>
+
+        <button
+          type="button"
+          class="nav-link"
+          [class.active]="isActive('reports')"
+          (click)="navigateTo('reports')"
+        >
+          <span class="nav-icon">▤</span>
+          <span>Reports</span>
+        </button>
+      </nav>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-status">
+        <span
+          class="sidebar-status-dot"
+          [class.status-online]="websocketStatus() === 'connected'"
+          [class.status-offline]="websocketStatus() === 'disconnected'"
+          [class.status-warning]="
+            websocketStatus() === 'connecting' || websocketStatus() === 'reconnecting'
+          "
+        >
+        </span>
+
+        <div>
+          <strong>Live Connection</strong>
+          <small>{{ websocketStatus() }}</small>
+        </div>
+      </div>
+
+      <div class="sidebar-version">
+        IoT Intrusion Detection
+        <span>Security Platform</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="dashboard">
+    <!-- UNIFIED TOP HEADER -->
+    <header class="header">
+      <div class="header-title">
+        <div class="header-brand-icon">⬡</div>
+        <div>
+          <h1>Network Intrusion Detection System</h1>
+          <p>{{ getPageTitle() }} · IoT Security Operations Center</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Backend health component now sits in the header row -->
+        <div class="header-backend-status">
+          <app-backend-status />
+        </div>
+
+        <!-- WebSocket connection -->
+        <div
+          class="websocket-status"
+          [class.connected]="websocketStatus() === 'connected'"
+          [class.reconnecting]="
+            websocketStatus() === 'reconnecting' || websocketStatus() === 'connecting'
+          "
+          [class.disconnected]="websocketStatus() === 'disconnected'"
+        >
+          <span class="status-dot"></span>
+          <span>{{ websocketStatus() }}</span>
+        </div>
+
+        <button
+          type="button"
+          class="refresh-button"
+          (click)="refreshDashboard()"
+          [disabled]="analyticsLoading() || devicesLoading()"
+        >
+          {{ analyticsLoading() || devicesLoading() ? 'Refreshing...' : '↻ Refresh' }}
+        </button>
+      </div>
+    </header>
+
+    <!-- SELECTED PAGE -->
+    <div class="page-content">
+      @switch (activeView()) {
+        @case ('dashboard') {
+          <section class="analytics-section">
+            <div class="analytics-heading">
+              <div>
+                <h2>Security Overview</h2>
+                <p>Monitor IoT network security and intrusion detection activity</p>
+              </div>
+            </div>
+
+            @if (analyticsLoading()) {
+              <div class="analytics-message">Loading security analytics...</div>
+            }
+
+            @if (analyticsError()) {
+              <div class="analytics-error">
+                {{ analyticsError() }}
+                <button type="button" (click)="loadAnalytics()">Retry</button>
+              </div>
+            }
+
+            @if (analytics(); as data) {
+              <div class="analytics-grid">
+                <div class="analytics-card total-card">
+                  <div class="card-icon">📊</div>
+                  <div class="card-content">
+                    <span>Total Predictions</span>
+                    <strong>{{ data.totalPredictions }}</strong>
+                    <small>Analyzed traffic records</small>
+                  </div>
+                </div>
+
+                <div class="analytics-card normal-card">
+                  <div class="card-icon">✓</div>
+                  <div class="card-content">
+                    <span>Normal Traffic</span>
+                    <strong>{{ data.normalPredictions }}</strong>
+                    <small>Predicted normal records</small>
+                  </div>
+                </div>
+
+                <div class="analytics-card attack-card">
+                  <div class="card-icon">⚠</div>
+                  <div class="card-content">
+                    <span>Attack Traffic</span>
+                    <strong>{{ data.attackPredictions }}</strong>
+                    <small>Predicted attack records</small>
+                  </div>
+                </div>
+
+                <div class="analytics-card incident-card">
+                  <div class="card-icon">🚨</div>
+                  <div class="card-content">
+                    <span>Active Incidents</span>
+                    <strong>{{ data.activeIncidents }}</strong>
+                    <small>Unresolved incidents</small>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dashboard-charts-grid">
+                <div class="dashboard-panel trends-panel">
+                  <app-prediction-trends />
+                </div>
+
+                <div class="dashboard-panel risk-panel">
+                  <div class="panel-heading">
+                    <div>
+                      <h3>Risk Distribution</h3>
+                      <p>Prediction risk classification</p>
+                    </div>
+                  </div>
+
+                  <div class="risk-distribution-grid">
+                    <div class="risk-card low-risk">
+                      <span class="risk-label">Low Risk</span>
+                      <strong>{{ data.riskDistribution.low }}</strong>
+                    </div>
+
+                    <div class="risk-card medium-risk">
+                      <span class="risk-label">Medium Risk</span>
+                      <strong>{{ data.riskDistribution.medium }}</strong>
+                    </div>
+
+                    <div class="risk-card high-risk">
+                      <span class="risk-label">High Risk</span>
+                      <strong>{{ data.riskDistribution.high }}</strong>
+                    </div>
+
+                    <div class="risk-card critical-risk">
+                      <span class="risk-label">Critical Risk</span>
+                      <strong>{{ data.riskDistribution.critical }}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </section>
+        }
+
+        @case ('alerts') {
+          <section class="dashboard-section">
+            <app-prediction-history />
+          </section>
+          <section class="dashboard-section">
+            <app-incident-management />
+          </section>
+        }
+
+        @case ('devices') {
+          <section class="dashboard-section">
+            <app-devices
+              [devices]="devices()"
+              [loading]="devicesLoading()"
+              [error]="devicesError()"
+            />
+          </section>
+          <section class="dashboard-section">
+            <app-device-form (deviceRegistered)="loadDevices()" />
+          </section>
+        }
+
+        @case ('traffic') {
+          <section class="dashboard-section">
+            <app-detection />
+          </section>
+          <section class="dashboard-section">
+            <app-prediction-trends />
+          </section>
+        }
+
+        @case ('analysis') {
+          <section class="dashboard-section">
+            <app-explainability />
+          </section>
+        }
+
+        @case ('reports') {
+          <section class="dashboard-section">
+            <app-csv-upload />
+          </section>
+        }
+      }
+    </div>
+
+    <footer class="dashboard-footer">
+      <span>IoT Intrusion Detection System</span>
+      <span>Explainable AI | Risk-Aware Monitoring</span>
+    </footer>
+  </main>
+</div>

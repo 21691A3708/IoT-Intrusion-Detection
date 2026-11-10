@@ -1,0 +1,118 @@
+<section class="devices-section">
+  <div class="section-header">
+    <div class="heading-content">
+      <div class="heading-icon">⌘</div>
+      <div>
+        <h2>Device Management</h2>
+        <p>Monitor and manage registered IoT devices across your network.</p>
+      </div>
+    </div>
+
+    <div class="device-count">
+      <span class="count-indicator"></span>
+      {{ devices().length }} Registered Devices
+    </div>
+  </div>
+
+  <div class="overview-card">
+    <div class="overview-icon">▣</div>
+    <div class="overview-content">
+      <span class="overview-label">Total Registered Devices</span>
+      <strong>{{ devices().length }}</strong>
+      <p>Devices currently registered in the IoT monitoring system</p>
+    </div>
+  </div>
+
+  <div class="devices-list-section">
+    <div class="list-heading">
+      <div>
+        <h3>Registered Devices</h3>
+        <p>Device inventory and registration information</p>
+      </div>
+      <span class="record-count">{{ devices().length }} Records</span>
+    </div>
+
+    @if (loading()) {
+      <div class="message loading-message">
+        <span class="loading-indicator"></span>
+        Loading registered devices...
+      </div>
+    } @else if (error()) {
+      <div class="message error-message">
+        <span>!</span>
+        {{ error() }}
+      </div>
+    } @else if (devices().length === 0) {
+      <div class="empty-state">
+        <div class="empty-icon">▣</div>
+        <h3>No devices registered</h3>
+        <p>Register an IoT device to start monitoring it in your network.</p>
+      </div>
+    } @else {
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>DEVICE</th>
+              <th>IDENTIFIER</th>
+              <th>DEVICE TYPE</th>
+              <th>LOCATION</th>
+              <th>STATUS</th>
+              <th>REGISTERED ON</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            @for (device of devices(); track device.id) {
+              <tr>
+                <td>
+                  <div class="device-name-cell">
+                    <div class="device-avatar">▣</div>
+                    <div class="device-name-content">
+                      <strong>{{ device.device_name }}</strong>
+                      <span>IoT Endpoint</span>
+                    </div>
+                  </div>
+                </td>
+
+                <td>
+                  <span class="identifier">
+                    {{ device.device_identifier }}
+                  </span>
+                </td>
+
+                <td>
+                  <span class="device-type">
+                    {{ device.device_type }}
+                  </span>
+                </td>
+
+                <td>
+                  <span class="location">
+                    {{ device.location || 'Not specified' }}
+                  </span>
+                </td>
+
+                <td>
+                  <span
+                    class="status-badge"
+                    [class]="'status-badge ' + device.status.toLowerCase()"
+                  >
+                    <span class="status-dot"></span>
+                    {{ device.status }}
+                  </span>
+                </td>
+
+                <td>
+                  <span class="registered-date">
+                    {{ device.created_at | date: 'medium' }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</section>

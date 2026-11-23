@@ -301,6 +301,59 @@ class IoTDataService:
         return self._serialize_rows(rows)
 
     # ------------------------------------------
+    # DEVICE-WISE ATTACK STATISTICS
+    # ------------------------------------------
+
+    def get_device_attack_counts(self):
+        """
+        Count attack predictions (predicted_label = 1) per registered device.
+        Predictions without a device_id are counted separately and are never
+        attributed to a registered device.
+        """
+
+        device_query = """
+            SELECT
+                d.id,
+                d.device_name,
+                d.device_identifier,
+                d.device_type,
+                COUNT(p.id) AS attack_count
+            FROM devices d
+            LEFT JOIN predictions p
+                ON p.device_id = d.id
+                AND p.predicted_label = 1
+            GROUP BY
+                d.id,
+                d.device_name,
+                d.device_identifier,
+                d.device_type
+            ORDER BY attack_count DESC, d.device_name ASC
+        """
+
+        unassigned_query = """
+            SELECT COUNT(*) AS unassigned_attack_count
+            FROM predictions
+            WHERE predicted_label = 1
+              AND device_id IS NULL
+        """
+
+        devices = self._execute_read_query(device_query)
+        unassigned = self._execute_read_query(unassigned_query)
+
+        for device in devices:
+            device["attack_count"] = int(device["attack_count"] or 0)
+
+        unassigned_count = (
+            int(unassigned[0]["unassigned_attack_count"])
+            if unassigned else 0
+        )
+
+        return {
+            "devices": self._serialize_rows(devices),
+            "unassigned_attack_count": unassigned_count,
+        }
+
+    # ------------------------------------------
     # SERIALIZE DATABASE RESULTS
     # ------------------------------------------
 

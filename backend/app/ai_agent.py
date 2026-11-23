@@ -437,6 +437,17 @@ class IoTSecurityAgent:
         ):
             return "devices"
 
+        # Device with the most attack predictions
+        if re.search(
+            r"\b(which|what)\b.*\b(device|sensor|camera)\b.*"
+            r"\b(most|highest|maximum|largest)\b.*\b(attacks?|attack predictions)\b",
+            normalized
+        ) or re.search(
+            r"\b(top|highest)\b.*\b(device|devices)\b.*\b(attacks?)\b",
+            normalized
+        ):
+            return "top_attack_device"
+
         # Attacks
         if re.search(
             r"\b(attacks|attack count|detected attacks|"
@@ -538,6 +549,71 @@ class IoTSecurityAgent:
                     f"Online: {d['online_devices']}\n"
                     f"Offline: {d['offline_devices']}"
                 )
+
+            # Device-wise attack statistics
+            elif intent == "top_attack_device":
+
+                data = self.data_service.get_device_attack_counts()
+                devices = data["devices"]
+                devices_with_attacks = [
+                    device for device in devices
+                    if device["attack_count"] > 0
+                ]
+
+                if not devices_with_attacks:
+                    return (
+                        "DEVICE-WISE ATTACK STATISTICS\\n\\n"
+                        "No attack predictions are currently linked to "
+                        "registered IoT devices.\\n"
+                        f"Unassigned attacks: "
+                        f"{data['unassigned_attack_count']}\\n\\n"
+                        "Predictions without a device ID cannot be "
+                        "attributed to a particular device."
+                    )
+
+                highest_count = devices_with_attacks[0]["attack_count"]
+                top_devices = [
+                    device for device in devices_with_attacks
+                    if device["attack_count"] == highest_count
+                ]
+
+                lines = ["DEVICE WITH THE MOST ATTACKS\\n"]
+
+                if len(top_devices) == 1:
+                    top = top_devices[0]
+                    lines.append(
+                        f"Device: {top['device_name']}\\n"
+                        f"Attack predictions: {top['attack_count']}\\n"
+                        f"Device identifier: {top['device_identifier']}\\n"
+                    )
+                else:
+                    lines.append(
+                        f"There is a tie: {len(top_devices)} devices "
+                        f"have {highest_count} attack predictions each.\\n"
+                    )
+                    for device in top_devices:
+                        lines.append(
+                            f"- {device['device_name']} "
+                            f"({device['device_identifier']})"
+                        )
+
+                lines.append("\\nATTACK COUNTS BY DEVICE")
+                for index, device in enumerate(devices_with_attacks, 1):
+                    lines.append(
+                        f"{index}. {device['device_name']}: "
+                        f"{device['attack_count']}"
+                    )
+
+                lines.append(
+                    "\\nUnassigned attacks: "
+                    f"{data['unassigned_attack_count']}"
+                )
+                lines.append(
+                    "Note: Counts are based on attack predictions "
+                    "(predicted_label = 1), not incident records."
+                )
+
+                return "\\n".join(lines)
 
             # Attack statistics
             elif intent == "attacks":
@@ -697,6 +773,7 @@ class IoTSecurityAgent:
 
         live_intents = {
             "overview",
+            "top_attack_device",
             "attacks",
             "predictions",
             "incidents",

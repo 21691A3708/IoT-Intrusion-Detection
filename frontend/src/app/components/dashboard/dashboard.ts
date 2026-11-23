@@ -15,6 +15,7 @@ import { Explainability } from '../explainability/explainability';
 import { IncidentManagement } from '../incident-management/incident-management';
 import { CsvUpload } from '../csv-upload/csv-upload';
 import { PredictionTrends } from '../prediction-trends/prediction-trends';
+import { AssistantChat } from '../assistant-chat/assistant-chat';
 
 export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'analysis' | 'reports';
 
@@ -31,6 +32,7 @@ export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'an
     IncidentManagement,
     CsvUpload,
     PredictionTrends,
+    AssistantChat,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',

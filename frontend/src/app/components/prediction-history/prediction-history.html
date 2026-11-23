@@ -1,0 +1,164 @@
+<section class="history-section">
+  <!-- SECTION HEADER -->
+  <div class="section-header">
+    <div class="heading-content">
+      <div class="heading-icon">◈</div>
+      <div>
+        <h2>Prediction History</h2>
+        <p>Previously analyzed IoT network traffic and detection results</p>
+      </div>
+    </div>
+
+    <button type="button" class="refresh-button" (click)="loadHistory()" [disabled]="loading()">
+      <span>↻</span>
+      {{ loading() ? 'Refreshing...' : 'Refresh History' }}
+    </button>
+  </div>
+
+  <!-- LOADING -->
+  @if (loading()) {
+    <div class="message loading-message">
+      <span class="loading-indicator"></span>
+      Loading prediction history...
+    </div>
+  }
+
+  <!-- ERROR -->
+  @if (error()) {
+    <div class="error">
+      <span>⚠</span>
+      {{ error() }}
+    </div>
+  }
+
+  <!-- PREDICTION DATA -->
+  @if (!loading() && !error()) {
+    <!-- SUMMARY CARDS -->
+    <div class="summary-grid">
+      <div class="summary-card total">
+        <div class="summary-top">
+          <span>Total Predictions</span>
+          <span class="summary-icon">▤</span>
+        </div>
+        <p>{{ total() }}</p>
+        <small>Analyzed traffic records</small>
+      </div>
+
+      <div class="summary-card normal">
+        <div class="summary-top">
+          <span>Normal Traffic</span>
+          <span class="summary-icon">✓</span>
+        </div>
+        <p>{{ normalCount }}</p>
+        <small>Predicted normal records</small>
+      </div>
+
+      <div class="summary-card attack">
+        <div class="summary-top">
+          <span>Attack Traffic</span>
+          <span class="summary-icon">⚠</span>
+        </div>
+        <p>{{ attackCount }}</p>
+        <small>Detected attack records</small>
+      </div>
+
+      <div class="summary-card high">
+        <div class="summary-top">
+          <span>High / Critical Risk</span>
+          <span class="summary-icon">🚨</span>
+        </div>
+        <p>{{ highRiskCount }}</p>
+        <small>Elevated risk predictions</small>
+      </div>
+    </div>
+
+    <!-- TABLE HEADER -->
+    <div class="table-heading">
+      <div>
+        <h3>Recent Predictions</h3>
+        <p>Detection results from the prediction engine</p>
+      </div>
+
+      <span class="record-count"> {{ predictions().length }} Records </span>
+    </div>
+
+    <!-- PREDICTION TABLE -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Prediction</th>
+            <th>Attack Probability</th>
+            <th>Risk Level</th>
+            <th>Source</th>
+            <th>Model Version</th>
+            <th>Date & Time</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (item of predictions(); track item.id) {
+            <tr>
+              <td>
+                <span
+                  class="prediction-badge"
+                  [class.attack]="item.predicted_label === 1"
+                  [class.normal]="item.predicted_label === 0"
+                >
+                  <span class="badge-dot"></span>
+                  {{ item.predicted_label === 1 ? 'ATTACK' : 'NORMAL' }}
+                </span>
+              </td>
+
+              <td>
+                <div class="probability-cell">
+                  <span> {{ item.attack_probability * 100 | number: '1.2-2' }}% </span>
+                  <div class="probability-track">
+                    <div
+                      class="probability-fill"
+                      [class.attack-fill]="item.predicted_label === 1"
+                      [class.normal-fill]="item.predicted_label === 0"
+                      [style.width.%]="item.attack_probability * 100"
+                    ></div>
+                  </div>
+                </div>
+              </td>
+
+              <td>
+                <span
+                  class="risk-badge"
+                  [class.low]="item.risk_level === 'low'"
+                  [class.medium]="item.risk_level === 'medium'"
+                  [class.high]="item.risk_level === 'high'"
+                  [class.critical]="item.risk_level === 'critical'"
+                >
+                  {{ item.risk_level | uppercase }}
+                </span>
+              </td>
+
+              <td>
+                <span class="source-label">{{ item.source }}</span>
+              </td>
+
+              <td>
+                <span class="model-label">{{ item.model_version }}</span>
+              </td>
+
+              <td class="date-cell">
+                {{ item.created_at | date: 'medium' }}
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6" class="empty">
+                <span>◈</span>
+                <strong>No prediction records found</strong>
+                <small>New traffic predictions will appear here.</small>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

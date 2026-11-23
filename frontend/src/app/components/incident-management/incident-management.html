@@ -1,0 +1,164 @@
+<section class="incident-container">
+  <!-- HEADER -->
+  <div class="section-header">
+    <div class="heading-content">
+      <div class="heading-icon">🛡️</div>
+      <div>
+        <h2>Incident Management</h2>
+        <p>Monitor, investigate, and manage detected security incidents.</p>
+      </div>
+    </div>
+
+    <button class="refresh-button" (click)="loadIncidents()" [disabled]="loading">
+      <span>↻</span>
+      {{ loading ? 'Loading...' : 'Refresh Incidents' }}
+    </button>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-top">
+        <span>Total Incidents</span>
+        <span class="summary-icon">📋</span>
+      </div>
+      <p>{{ totalIncidents }}</p>
+      <small>Recorded security incidents</small>
+    </div>
+
+    <div class="summary-card open">
+      <div class="summary-top">
+        <span>Open</span>
+        <span class="summary-icon">🔔</span>
+      </div>
+      <p>{{ incidents.filter((i) => i.status === 'open').length }}</p>
+      <small>Awaiting action</small>
+    </div>
+
+    <div class="summary-card investigating">
+      <div class="summary-top">
+        <span>Investigating</span>
+        <span class="summary-icon">🔍</span>
+      </div>
+      <p>{{ incidents.filter((i) => i.status === 'investigating').length }}</p>
+      <small>Under investigation</small>
+    </div>
+
+    <div class="summary-card resolved">
+      <div class="summary-top">
+        <span>Resolved</span>
+        <span class="summary-icon">✓</span>
+      </div>
+      <p>{{ incidents.filter((i) => i.status === 'resolved').length }}</p>
+      <small>Successfully resolved</small>
+    </div>
+  </div>
+
+  <!-- NOTIFICATIONS -->
+  <div class="success-message" *ngIf="successMessage">
+    <span>✓</span>
+    {{ successMessage }}
+  </div>
+
+  <div class="error-message" *ngIf="errorMessage">
+    <span>!</span>
+    {{ errorMessage }}
+  </div>
+
+  <!-- INCIDENT LIST HEADER -->
+  <div class="list-heading">
+    <div>
+      <h3>Security Incidents</h3>
+      <p>Review incident details and update their investigation status.</p>
+    </div>
+
+    <span class="record-count">{{ incidents.length }} records</span>
+  </div>
+
+  <!-- LOADING -->
+  <div class="message loading-message" *ngIf="loading">
+    <span class="loading-indicator"></span>
+    Loading security incidents...
+  </div>
+
+  <!-- EMPTY -->
+  <div class="empty-state" *ngIf="!loading && incidents.length === 0">
+    <span>🛡️</span>
+    <h3>No Security Incidents</h3>
+    <p>No incidents have been recorded yet.</p>
+  </div>
+
+  <!-- INCIDENT CARDS -->
+  <div class="incident-list" *ngIf="!loading && incidents.length > 0">
+    <article class="incident-card" *ngFor="let incident of incidents">
+      <div class="incident-top">
+        <div class="incident-title">
+          <span class="incident-indicator" [ngClass]="getSeverityClass(incident.severity)"> </span>
+
+          <div>
+            <h3>{{ incident.title }}</h3>
+            <p class="incident-id">ID: {{ incident.id }}</p>
+          </div>
+        </div>
+
+        <div class="badges">
+          <span class="severity-badge" [ngClass]="getSeverityClass(incident.severity)">
+            {{ incident.severity | uppercase }}
+          </span>
+
+          <span class="status-badge" [ngClass]="getStatusClass(incident.status)">
+            {{ incident.status.replace('_', ' ') | titlecase }}
+          </span>
+        </div>
+      </div>
+
+      <p class="incident-description">
+        {{ incident.description || 'No description available.' }}
+      </p>
+
+      <div class="incident-details">
+        <div class="detail-item">
+          <span class="detail-label">Created</span>
+          <span>{{ incident.created_at | date: 'medium' }}</span>
+        </div>
+
+        <div class="detail-item" *ngIf="incident.device_id">
+          <span class="detail-label">Device ID</span>
+          <span class="device-value">{{ incident.device_id }}</span>
+        </div>
+
+        <div class="detail-item" *ngIf="incident.resolved_at">
+          <span class="detail-label">Resolved</span>
+          <span>{{ incident.resolved_at | date: 'medium' }}</span>
+        </div>
+      </div>
+
+      <div class="incident-actions">
+        <div class="status-control">
+          <label for="status-{{ incident.id }}">Update incident status</label>
+
+          <select
+            id="status-{{ incident.id }}"
+            #statusSelect
+            [value]="incident.status"
+            [disabled]="updatingIncidentId === incident.id"
+          >
+            <option value="open" disabled>Open</option>
+            <option value="acknowledged">Acknowledged</option>
+            <option value="investigating">Investigating</option>
+            <option value="resolved">Resolved</option>
+            <option value="false_positive">False Positive</option>
+          </select>
+        </div>
+
+        <button
+          class="update-button"
+          [disabled]="updatingIncidentId === incident.id || statusSelect.value === incident.status"
+          (click)="updateStatus(incident.id, $any(statusSelect.value))"
+        >
+          {{ updatingIncidentId === incident.id ? 'Updating...' : 'Update Status' }}
+        </button>
+      </div>
+    </article>
+  </div>
+</section>

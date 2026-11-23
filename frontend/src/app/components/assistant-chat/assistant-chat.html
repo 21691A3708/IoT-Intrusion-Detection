@@ -1,0 +1,116 @@
+<div class="assistant-widget">
+  @if (isOpen()) {
+    <section
+      class="chat-window"
+      role="dialog"
+      aria-label="IoT Security Assistant"
+      aria-modal="false"
+    >
+      <header class="chat-header">
+        <div class="assistant-avatar" aria-hidden="true">
+          <span>⬡</span>
+        </div>
+
+        <div class="chat-heading">
+          <h2>IoT Security Assistant</h2>
+          <span class="connection-label">
+            <span class="connection-dot"></span>
+            Local project assistant
+          </span>
+        </div>
+
+        <button
+          type="button"
+          class="header-action"
+          aria-label="Minimize chat"
+          title="Minimize"
+          (click)="closeChat()"
+        >
+          −
+        </button>
+      </header>
+
+      <div class="chat-intro">
+        Answers use the project's security knowledge base and live database queries.
+      </div>
+
+      <div class="message-list" aria-live="polite" aria-relevant="additions">
+        @for (message of messages(); track trackMessage($index, message)) {
+          <div
+            class="message-row"
+            [class.user-row]="message.role === 'user'"
+            [class.assistant-row]="message.role === 'assistant'"
+          >
+            @if (message.role === 'assistant') {
+              <div class="message-avatar" aria-hidden="true">⬡</div>
+            }
+
+            <div class="message-content">
+              <div class="message-bubble" [class.user-bubble]="message.role === 'user'">
+                {{ message.text }}
+              </div>
+              <time class="message-time">{{ message.timestamp | date: 'shortTime' }}</time>
+            </div>
+          </div>
+        }
+
+        @if (isSending()) {
+          <div class="message-row assistant-row">
+            <div class="message-avatar" aria-hidden="true">⬡</div>
+            <div class="message-content">
+              <div class="typing-indicator" aria-label="Assistant is responding">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (errorMessage()) {
+        <div class="chat-error" role="alert">{{ errorMessage() }}</div>
+      }
+
+      <form class="chat-composer" (ngSubmit)="sendQuestion()">
+        <textarea
+          name="question"
+          [(ngModel)]="question"
+          placeholder="Ask about your IoT security..."
+          rows="1"
+          maxlength="2000"
+          [disabled]="isSending()"
+          (keydown.enter)="onEnter($event)"
+          aria-label="Type your question"
+        ></textarea>
+
+        <button
+          type="submit"
+          class="send-button"
+          [disabled]="!question.trim() || isSending()"
+          aria-label="Send message"
+          title="Send message"
+        >
+          ➤
+        </button>
+      </form>
+
+      <div class="chat-footer">IoT Intrusion Detection · Security Assistant</div>
+    </section>
+  }
+
+  <button
+    type="button"
+    class="chat-launcher"
+    [class.launcher-open]="isOpen()"
+    [attr.aria-expanded]="isOpen()"
+    aria-label="Open IoT Security Assistant"
+    title="Chat with IoT Security Assistant"
+    (click)="toggleChat()"
+  >
+    @if (isOpen()) {
+      <span class="launcher-close">×</span>
+    } @else {
+      <span class="launcher-icon">▤</span>
+      <span class="launcher-pulse"></span>
+    }
+  </button>
+</div>

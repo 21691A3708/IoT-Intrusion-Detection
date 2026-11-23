@@ -1,0 +1,28 @@
+<div class="status-card">
+  <div class="backend-indicator">
+    <span
+      class="status-dot"
+      [class.connected]="apiStatus() === 'Connected'"
+      [class.disconnected]="apiStatus() === 'Disconnected'"
+      [class.checking]="apiStatus() === 'Checking connection...'"
+    ></span>
+
+    <div class="backend-info">
+      <span class="backend-label">Backend</span>
+      <strong>{{ apiStatus() }}</strong>
+    </div>
+  </div>
+
+  <div class="backend-meta" *ngIf="health()">
+    <span>{{ health()?.service }}</span>
+  </div>
+
+  <button
+    type="button"
+    class="check-button"
+    (click)="checkHealth()"
+    [disabled]="apiStatus() === 'Checking connection...'"
+  >
+    ↻ Check
+  </button>
+</div>

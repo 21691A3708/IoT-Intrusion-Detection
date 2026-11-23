@@ -1,0 +1,126 @@
+<section class="trends-section">
+  <div class="trends-header">
+    <div class="heading-content">
+      <div class="heading-icon">⌁</div>
+      <div>
+        <h2>Prediction Analytics</h2>
+        <p>Monitor normal and malicious network traffic patterns over time.</p>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="refresh-button"
+      (click)="loadPredictionTrends()"
+      [disabled]="loading()"
+    >
+      @if (loading()) {
+        <span class="button-spinner"></span>
+        Loading...
+      } @else {
+        <span class="refresh-icon">↻</span>
+        Refresh Data
+      }
+    </button>
+  </div>
+
+  <div class="analytics-info">
+    <div class="info-icon">ⓘ</div>
+    <div>
+      <strong>Network Prediction Trends</strong>
+      <p>
+        This visualization shows the daily distribution of normal and attack predictions generated
+        by your intrusion detection model.
+      </p>
+    </div>
+    <div class="live-indicator">
+      <span class="live-dot"></span>
+      Live Updates
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <h3>Traffic Classification Trends</h3>
+        <p>Daily normal and attack prediction counts</p>
+      </div>
+
+      <div class="chart-legend">
+        <span class="legend-item">
+          <span class="legend-dot normal-dot"></span>
+          Normal
+        </span>
+        <span class="legend-item">
+          <span class="legend-dot attack-dot"></span>
+          Attack
+        </span>
+      </div>
+    </div>
+
+    <div class="filter-section">
+      <span class="filter-label">Time Period</span>
+
+      <div class="filter-buttons">
+        <button
+          type="button"
+          [class.active]="selectedRange() === '7days'"
+          (click)="changeRange('7days')"
+        >
+          7 Days
+        </button>
+
+        <button
+          type="button"
+          [class.active]="selectedRange() === '30days'"
+          (click)="changeRange('30days')"
+        >
+          30 Days
+        </button>
+
+        <button
+          type="button"
+          [class.active]="selectedRange() === 'all'"
+          (click)="changeRange('all')"
+        >
+          All Available
+        </button>
+      </div>
+    </div>
+
+    @if (loading()) {
+      <div class="chart-state">
+        <span class="loading-spinner"></span>
+        <p>Loading prediction analytics...</p>
+      </div>
+    } @else if (error()) {
+      <div class="chart-state error-state">
+        <div class="state-icon">!</div>
+        <h3>Unable to Load Trends</h3>
+        <p>{{ error() }}</p>
+
+        <button type="button" (click)="loadPredictionTrends()">Try Again</button>
+      </div>
+    } @else if (lineChartData.labels?.length === 0) {
+      <div class="chart-state">
+        <div class="state-icon">⌁</div>
+        <h3>No Prediction Data</h3>
+        <p>No prediction records were found for the selected time period.</p>
+      </div>
+    } @else {
+      <div class="chart-container">
+        <canvas
+          baseChart
+          [type]="'line'"
+          [data]="lineChartData"
+          [options]="lineChartOptions"
+        ></canvas>
+      </div>
+    }
+
+    <div class="chart-footer">
+      <span>Source: IoT Intrusion Detection System</span>
+      <span>Classification: Normal / Attack</span>
+    </div>
+  </div>
+</section>

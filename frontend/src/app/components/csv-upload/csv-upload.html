@@ -1,0 +1,217 @@
+<section class="csv-upload">
+  <div class="section-header">
+    <div class="heading-content">
+      <div class="heading-icon">⇧</div>
+      <div>
+        <h2>CSV Batch Analysis</h2>
+        <p>Upload IoT network traffic datasets for bulk intrusion detection and risk assessment.</p>
+      </div>
+    </div>
+
+    <span class="model-badge"> Random Forest Analysis </span>
+  </div>
+
+  <div class="info-banner">
+    <span class="info-icon">ⓘ</span>
+    <div>
+      <strong>Batch Intrusion Detection</strong>
+      <p>
+        Upload a CSV dataset containing the 36 required network traffic features. The backend will
+        analyze records and generate prediction and risk summaries.
+      </p>
+    </div>
+  </div>
+
+  <div class="upload-card">
+    <div class="card-heading">
+      <div>
+        <h3>Upload Network Traffic Dataset</h3>
+        <p>Select a CSV file from your computer to begin batch analysis.</p>
+      </div>
+      <span class="format-badge">CSV FORMAT</span>
+    </div>
+
+    <div class="upload-body">
+      <div class="upload-icon">⇧</div>
+
+      <h3>Select Your CSV File</h3>
+      <p class="upload-description">
+        Choose a dataset containing the required IoT traffic features.
+      </p>
+
+      <input
+        #fileInput
+        type="file"
+        accept=".csv,text/csv"
+        (change)="onFileSelected($event)"
+        [disabled]="uploading"
+      />
+
+      @if (selectedFile) {
+        <div class="selected-file">
+          <div class="file-icon">▤</div>
+          <div class="file-details">
+            <strong>{{ selectedFile.name }}</strong>
+            <span>CSV Dataset</span>
+          </div>
+          <span class="file-size"> {{ (selectedFile.size / 1024 / 1024).toFixed(2) }} MB </span>
+        </div>
+      }
+
+      <div class="upload-actions">
+        <button
+          type="button"
+          class="upload-button"
+          (click)="uploadFile()"
+          [disabled]="!selectedFile || uploading"
+        >
+          @if (uploading) {
+            <span class="spinner"></span>
+            Processing Dataset...
+          } @else {
+            ⇧ Upload and Analyze
+          }
+        </button>
+
+        <button
+          type="button"
+          class="reset-button"
+          (click)="resetUpload(); fileInput.value = ''"
+          [disabled]="uploading"
+        >
+          Reset
+        </button>
+      </div>
+
+      @if (uploading) {
+        <div class="processing-panel">
+          <div class="processing-heading">
+            <span class="spinner"></span>
+            <div>
+              <strong>Analyzing Network Traffic</strong>
+              <p>Random Forest model is processing your dataset.</p>
+            </div>
+          </div>
+
+          <div class="processing-time">
+            <span>Elapsed Time</span>
+            <strong>{{ elapsedTimeText }}</strong>
+          </div>
+
+          <div class="progress-track">
+            <div class="progress-indeterminate"></div>
+          </div>
+
+          <small>
+            Please keep this page open while processing is in progress. Actual processing time
+            depends on file size and server performance.
+          </small>
+        </div>
+      }
+
+      @if (successMessage) {
+        <div class="success-message" role="status">
+          <span>✓</span>
+          {{ successMessage }}
+        </div>
+      }
+
+      @if (errorMessage) {
+        <div class="error-message" role="alert">
+          <span>!</span>
+          {{ errorMessage }}
+        </div>
+      }
+    </div>
+  </div>
+
+  @if (result) {
+    <div class="results-section">
+      <div class="results-heading">
+        <div>
+          <h3>Batch Analysis Results</h3>
+          <p>Summary of the processed IoT traffic dataset.</p>
+        </div>
+        <span class="completed-badge">✓ Processing Complete</span>
+      </div>
+
+      <div class="results-card">
+        <div class="result-file">
+          <div class="file-icon">▤</div>
+          <div>
+            <span>PROCESSED DATASET</span>
+            <strong>{{ result.filename }}</strong>
+          </div>
+        </div>
+
+        <div class="processing-time result-time">
+          <span>⏱ Total Processing Time</span>
+          <strong>{{ processingTimeText }}</strong>
+        </div>
+
+        <div class="summary-heading">
+          <h4>Prediction Summary</h4>
+          <span>Classification Results</span>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-item total">
+            <span>Total Records</span>
+            <strong>{{ result.total_records }}</strong>
+          </div>
+
+          <div class="summary-item normal">
+            <span>Normal Records</span>
+            <strong>{{ result.normal_records }}</strong>
+          </div>
+
+          <div class="summary-item attack">
+            <span>Attack Records</span>
+            <strong>{{ result.attack_records }}</strong>
+          </div>
+
+          <div class="summary-item incidents">
+            <span>Incidents Created</span>
+            <strong>{{ result.incidents_created }}</strong>
+          </div>
+        </div>
+
+        <div class="risk-heading">
+          <h4>Risk Distribution</h4>
+          <span>Records by risk classification</span>
+        </div>
+
+        <div class="risk-grid">
+          <div class="risk-item low">
+            <span class="risk-indicator"></span>
+            <span>Low Risk</span>
+            <strong>{{ result.risk_distribution.low }}</strong>
+          </div>
+
+          <div class="risk-item medium">
+            <span class="risk-indicator"></span>
+            <span>Medium Risk</span>
+            <strong>{{ result.risk_distribution.medium }}</strong>
+          </div>
+
+          <div class="risk-item high">
+            <span class="risk-indicator"></span>
+            <span>High Risk</span>
+            <strong>{{ result.risk_distribution.high }}</strong>
+          </div>
+
+          <div class="risk-item critical">
+            <span class="risk-indicator"></span>
+            <span>Critical Risk</span>
+            <strong>{{ result.risk_distribution.critical }}</strong>
+          </div>
+        </div>
+
+        <div class="results-footer">
+          <span>Analysis Engine: Random Forest</span>
+          <span>Source: CSV Batch Upload</span>
+        </div>
+      </div>
+    </div>
+  }
+</section>

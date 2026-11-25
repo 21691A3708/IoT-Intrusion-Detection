@@ -1,0 +1,8 @@
+ResponseID,DeviceID,PredictedFamily,RiskScore,RiskLevel,ResponseStatus,IncidentCreated,AuditEvents,StorageMode,RestartVerification,RealNetworkAction
+68ae6b54-63b3-44cd-9c9a-5ac1899019c5,sensor-001,WebBased,40.21980667056414,medium,restricted,False,1,postgresql,PASSED,False
+b675163f-bf1a-410e-b192-bb77bebe9737,sensor-001,Mirai,53.9988294644923,high,restricted,True,1,postgresql,PASSED,False
+c78591d4-0114-4aa6-bdba-ea6a0d303fd1,camera-001,Mirai,77.99830922648887,critical,restricted,True,1,postgresql,PASSED,False
+b2285172-d1e7-42cb-9861-68b3fe0786d7,gateway-001,Mirai,91.99800575432022,critical,restricted,True,1,postgresql,PASSED,False
+3927d430-468b-4a99-8d54-d760da3b4f9e,medical-001,Mirai,85.99813581382108,critical,restricted,True,1,postgresql,PASSED,False
+6f389e81-4748-4295-93c9-96d8c8c930a0,industrial-001,Mirai,85.99813581382108,critical,restricted,True,1,postgresql,PASSED,False
+72558c41-191e-4c27-b4dc-06aea584234c,unknown-device,Mirai,67.99852599232365,high,restricted,True,1,postgresql,PASSED,False

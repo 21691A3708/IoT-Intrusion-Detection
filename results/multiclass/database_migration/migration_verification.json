@@ -1,0 +1,274 @@
+{
+    "schema": "multiclass",
+    "tables": [
+        {
+            "table_name": "incidents",
+            "rls_enabled": true,
+            "can_select": true,
+            "can_insert": true,
+            "can_update": true
+        },
+        {
+            "table_name": "predictions",
+            "rls_enabled": true,
+            "can_select": true,
+            "can_insert": true,
+            "can_update": true
+        },
+        {
+            "table_name": "response_audit_logs",
+            "rls_enabled": true,
+            "can_select": true,
+            "can_insert": true,
+            "can_update": true
+        },
+        {
+            "table_name": "response_records",
+            "rls_enabled": true,
+            "can_select": true,
+            "can_insert": true,
+            "can_update": true
+        },
+        {
+            "table_name": "risk_assessments",
+            "rls_enabled": true,
+            "can_select": true,
+            "can_insert": true,
+            "can_update": true
+        }
+    ],
+    "legacy_tables": [
+        "devices",
+        "incident_audit_logs",
+        "incidents",
+        "predictions",
+        "user_profiles"
+    ],
+    "constraints": [
+        {
+            "table_name": "incidents",
+            "constraint_name": "incidents_assigned_to_fkey",
+            "definition": "FOREIGN KEY (assigned_to) REFERENCES auth.users(id) ON DELETE SET NULL"
+        },
+        {
+            "table_name": "incidents",
+            "constraint_name": "incidents_pkey",
+            "definition": "PRIMARY KEY (id)"
+        },
+        {
+            "table_name": "incidents",
+            "constraint_name": "incidents_risk_assessment_id_fkey",
+            "definition": "FOREIGN KEY (risk_assessment_id) REFERENCES multiclass.risk_assessments(id) ON DELETE RESTRICT"
+        },
+        {
+            "table_name": "incidents",
+            "constraint_name": "incidents_risk_assessment_id_key",
+            "definition": "UNIQUE (risk_assessment_id)"
+        },
+        {
+            "table_name": "incidents",
+            "constraint_name": "mc_incident_severity_check",
+            "definition": "CHECK ((severity = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])))"
+        },
+        {
+            "table_name": "incidents",
+            "constraint_name": "mc_incident_status_check",
+            "definition": "CHECK ((status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'investigating'::text, 'resolved'::text, 'false_positive'::text])))"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "mc_calibrated_probability_check",
+            "definition": "CHECK (((calibrated_attack_probability >= (0)::double precision) AND (calibrated_attack_probability <= (1)::double precision)))"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "mc_detection_status_check",
+            "definition": "CHECK ((detection_status = ANY (ARRAY['low_probability'::text, 'suspicious'::text, 'elevated_suspicion'::text, 'high_confidence_attack'::text])))"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "mc_prediction_confidence_check",
+            "definition": "CHECK (((prediction_confidence >= (0)::double precision) AND (prediction_confidence <= (1)::double precision)))"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "mc_prediction_family_check",
+            "definition": "CHECK ((((predicted_label = 0) AND (predicted_family = 'Benign'::text)) OR ((predicted_label = 1) AND (predicted_family = 'DDoS'::text)) OR ((predicted_label = 2) AND (predicted_family = 'DoS'::text)) OR ((predicted_label = 3) AND (predicted_family = 'Reconnaissance'::text)) OR ((predicted_label = 4) AND (predicted_family = 'BruteForce'::text)) OR ((predicted_label = 5) AND (predicted_family = 'Spoofing'::text)) OR ((predicted_label = 6) AND (predicted_family = 'Mirai'::text)) OR ((predicted_label = 7) AND (predicted_family = 'WebBased'::text))))"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "mc_prediction_json_check",
+            "definition": "CHECK (((jsonb_typeof(features) = 'object'::text) AND (jsonb_typeof(class_probabilities) = 'object'::text) AND (jsonb_typeof(prediction_details) = 'object'::text)))"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "mc_prediction_label_check",
+            "definition": "CHECK (((predicted_label >= 0) AND (predicted_label <= 7)))"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "mc_raw_probability_check",
+            "definition": "CHECK (((raw_attack_probability >= (0)::double precision) AND (raw_attack_probability <= (1)::double precision)))"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "predictions_device_id_fkey",
+            "definition": "FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL"
+        },
+        {
+            "table_name": "predictions",
+            "constraint_name": "predictions_pkey",
+            "definition": "PRIMARY KEY (id)"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "constraint_name": "mc_audit_details_check",
+            "definition": "CHECK ((jsonb_typeof(details) = 'object'::text))"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "constraint_name": "mc_audit_sequence_check",
+            "definition": "CHECK ((event_sequence > 0))"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "constraint_name": "mc_audit_sequence_unique",
+            "definition": "UNIQUE (response_id, event_sequence)"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "constraint_name": "mc_audit_simulation_check",
+            "definition": "CHECK ((simulation_only IS TRUE))"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "constraint_name": "response_audit_logs_actor_user_id_fkey",
+            "definition": "FOREIGN KEY (actor_user_id) REFERENCES auth.users(id) ON DELETE SET NULL"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "constraint_name": "response_audit_logs_pkey",
+            "definition": "PRIMARY KEY (id)"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "constraint_name": "response_audit_logs_response_id_fkey",
+            "definition": "FOREIGN KEY (response_id) REFERENCES multiclass.response_records(id) ON DELETE RESTRICT"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "mc_response_action_check",
+            "definition": "CHECK (((proposed_containment_action IS NULL) OR (proposed_containment_action = ANY (ARRAY['simulate_device_isolation'::text, 'simulate_rate_limiting'::text, 'simulate_traffic_filtering'::text]))))"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "mc_response_execution_check",
+            "definition": "CHECK (((NOT simulation_executed) OR (approval_granted AND containment_eligible AND synthetic_fixture)))"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "mc_response_fixture_safety_check",
+            "definition": "CHECK ((synthetic_fixture OR ((status = ANY (ARRAY['restricted'::text, 'not_required'::text])) AND (NOT containment_eligible) AND (NOT approval_granted) AND (NOT simulation_authorized) AND (NOT simulation_executed))))"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "mc_response_no_containment_check",
+            "definition": "CHECK ((containment_authorized IS FALSE))"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "mc_response_no_real_execution_check",
+            "definition": "CHECK ((real_network_action_executed IS FALSE))"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "mc_response_plan_json_check",
+            "definition": "CHECK ((jsonb_typeof(response_plan) = 'object'::text))"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "mc_response_simulation_only_check",
+            "definition": "CHECK ((simulation_only IS TRUE))"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "mc_response_status_check",
+            "definition": "CHECK ((status = ANY (ARRAY['not_required'::text, 'restricted'::text, 'pending_approval'::text, 'approved'::text, 'rejected'::text, 'simulated'::text, 'rolled_back'::text])))"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "response_records_pkey",
+            "definition": "PRIMARY KEY (id)"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "response_records_risk_assessment_id_fkey",
+            "definition": "FOREIGN KEY (risk_assessment_id) REFERENCES multiclass.risk_assessments(id) ON DELETE RESTRICT"
+        },
+        {
+            "table_name": "response_records",
+            "constraint_name": "response_records_risk_assessment_id_key",
+            "definition": "UNIQUE (risk_assessment_id)"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "mc_criticality_check",
+            "definition": "CHECK (((device_criticality >= (0)::double precision) AND (device_criticality <= (1)::double precision)))"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "mc_exposure_check",
+            "definition": "CHECK (((device_exposure >= (0)::double precision) AND (device_exposure <= (1)::double precision)))"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "mc_impact_check",
+            "definition": "CHECK (((expected_attack_impact >= (0)::double precision) AND (expected_attack_impact <= (1)::double precision)))"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "mc_risk_json_check",
+            "definition": "CHECK (((jsonb_typeof(device_context) = 'object'::text) AND (jsonb_typeof(risk_factors) = 'object'::text) AND (jsonb_typeof(risk_weights) = 'object'::text) AND (jsonb_typeof(risk_contributions) = 'object'::text) AND (jsonb_typeof(assessment_details) = 'object'::text)))"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "mc_risk_level_check",
+            "definition": "CHECK ((((risk_score < (25)::double precision) AND (risk_level = 'low'::text)) OR ((risk_score >= (25)::double precision) AND (risk_score < (50)::double precision) AND (risk_level = 'medium'::text)) OR ((risk_score >= (50)::double precision) AND (risk_score < (75)::double precision) AND (risk_level = 'high'::text)) OR ((risk_score >= (75)::double precision) AND (risk_level = 'critical'::text))))"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "mc_risk_probability_check",
+            "definition": "CHECK (((attack_probability >= (0)::double precision) AND (attack_probability <= (1)::double precision)))"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "mc_risk_score_check",
+            "definition": "CHECK (((risk_score >= (0)::double precision) AND (risk_score <= (100)::double precision)))"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "risk_assessments_pkey",
+            "definition": "PRIMARY KEY (id)"
+        },
+        {
+            "table_name": "risk_assessments",
+            "constraint_name": "risk_assessments_prediction_id_fkey",
+            "definition": "FOREIGN KEY (prediction_id) REFERENCES multiclass.predictions(id) ON DELETE RESTRICT"
+        }
+    ],
+    "backend_access": {
+        "schema_usage": true,
+        "prediction_rls_active": false,
+        "response_rls_active": false
+    },
+    "client_access": [
+        {
+            "rolname": "authenticated",
+            "schema_usage": false
+        },
+        {
+            "rolname": "anon",
+            "schema_usage": false
+        }
+    ]
+}

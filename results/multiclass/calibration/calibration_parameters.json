@@ -1,0 +1,9 @@
+{
+    "method": "sigmoid_on_logit",
+    "coefficient": 0.7393013299108777,
+    "intercept": 0.5254317161647722,
+    "epsilon": 1e-06,
+    "target": "attack_vs_benign",
+    "fitted_on": "validation",
+    "independent_evaluation": false
+}

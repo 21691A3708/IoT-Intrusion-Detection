@@ -1,0 +1,43 @@
+ActualFamily,PredictedFamily,DeviceID,DeviceName,AttackProbability,Criticality,Exposure,ExpectedImpact,RiskScore,RiskLevel,RecommendedAction,ContextKnown
+Benign,WebBased,sensor-001,Temperature Sensor,0.8974268176476043,0.25,0.3,0.7204202359360903,40.21980667056414,medium,review_suspicious_activity,True
+Benign,WebBased,camera-001,Security Camera,0.8974268176476043,0.7,0.6,0.7204202359360903,61.75805029410664,high,alert_and_investigate,True
+Benign,WebBased,gateway-001,IoT Gateway,0.8974268176476043,0.9,0.9,0.7204202359360903,74.3220257411731,high,alert_and_investigate,True
+Benign,WebBased,medical-001,Medical IoT Device,0.8974268176476043,1.0,0.4,0.7204202359360903,68.93746483528749,high,alert_and_investigate,True
+Benign,WebBased,industrial-001,Industrial Controller,0.8974268176476043,0.95,0.5,0.7204202359360903,68.93746483528749,high,alert_and_investigate,True
+Benign,WebBased,,Unknown Device,0.8974268176476043,0.5,0.5,0.7204202359360903,52.78378211763061,high,alert_and_investigate,False
+DDoS,DoS,sensor-001,Temperature Sensor,0.9999783234165242,0.25,0.3,0.8174330526736217,48.69626651537717,medium,alert_and_investigate,True
+DDoS,DoS,camera-001,Security Camera,0.9999783234165242,0.7,0.6,0.8174330526736217,72.69574627737374,high,alert_and_investigate,True
+DDoS,DoS,gateway-001,IoT Gateway,0.9999783234165242,0.9,0.9,0.8174330526736217,86.6954428052051,critical,priority_investigation,True
+DDoS,DoS,medical-001,Medical IoT Device,0.9999783234165242,1.0,0.4,0.8174330526736217,80.69557286470594,critical,priority_investigation,True
+DDoS,DoS,industrial-001,Industrial Controller,0.9999783234165242,0.95,0.5,0.8174330526736217,80.69557286470594,critical,priority_investigation,True
+DDoS,DoS,,Unknown Device,0.9999783234165242,0.5,0.5,0.8174330526736217,62.6959630432085,high,alert_and_investigate,False
+DoS,DoS,sensor-001,Temperature Sensor,0.9999783234165242,0.25,0.3,0.7500128645044847,45.99951744618516,medium,alert_and_investigate,True
+DoS,DoS,camera-001,Security Camera,0.9999783234165242,0.7,0.6,0.7500128645044847,69.99899720818173,high,alert_and_investigate,True
+DoS,DoS,gateway-001,IoT Gateway,0.9999783234165242,0.9,0.9,0.7500128645044847,83.99869373601308,critical,priority_investigation,True
+DoS,DoS,medical-001,Medical IoT Device,0.9999783234165242,1.0,0.4,0.7500128645044847,77.99882379551394,critical,priority_investigation,True
+DoS,DoS,industrial-001,Industrial Controller,0.9999783234165242,0.95,0.5,0.7500128645044847,77.99882379551393,critical,priority_investigation,True
+DoS,DoS,,Unknown Device,0.9999783234165242,0.5,0.5,0.7500128645044847,59.99921397401649,high,alert_and_investigate,False
+Reconnaissance,WebBased,sensor-001,Temperature Sensor,0.9593254126020534,0.25,0.3,0.8012528215261516,46.09569434599825,medium,alert_and_investigate,True
+Reconnaissance,WebBased,camera-001,Security Camera,0.9593254126020534,0.7,0.6,0.8012528215261516,69.11950424844753,high,alert_and_investigate,True
+Reconnaissance,WebBased,gateway-001,IoT Gateway,0.9593254126020534,0.9,0.9,0.8012528215261516,82.55006002487629,critical,priority_investigation,True
+Reconnaissance,WebBased,medical-001,Medical IoT Device,0.9593254126020534,1.0,0.4,0.8012528215261516,76.79410754926396,critical,priority_investigation,True
+Reconnaissance,WebBased,industrial-001,Industrial Controller,0.9593254126020534,0.95,0.5,0.8012528215261516,76.79410754926396,critical,priority_investigation,True
+Reconnaissance,WebBased,,Unknown Device,0.9593254126020534,0.5,0.5,0.8012528215261516,59.52625012242699,high,alert_and_investigate,False
+Spoofing,Benign,sensor-001,Temperature Sensor,0.6275250731858157,0.25,0.3,0.6245684554493507,25.71769579958928,medium,review_suspicious_activity,True
+Spoofing,Benign,camera-001,Security Camera,0.6275250731858157,0.7,0.6,0.6245684554493507,40.778297556048855,medium,review_suspicious_activity,True
+Spoofing,Benign,gateway-001,IoT Gateway,0.6275250731858157,0.9,0.9,0.6245684554493507,49.56364858065028,medium,review_suspicious_activity,True
+Spoofing,Benign,medical-001,Medical IoT Device,0.6275250731858157,1.0,0.4,0.6245684554493507,45.79849814153538,medium,review_suspicious_activity,True
+Spoofing,Benign,industrial-001,Industrial Controller,0.6275250731858157,0.95,0.5,0.6245684554493507,45.79849814153538,medium,review_suspicious_activity,True
+Spoofing,Benign,,Unknown Device,0.6275250731858157,0.5,0.5,0.6245684554493507,34.5030468241907,medium,review_suspicious_activity,False
+Mirai,Mirai,sensor-001,Temperature Sensor,0.9999783234165242,0.25,0.3,0.95,53.9988294644923,high,alert_and_investigate,True
+Mirai,Mirai,camera-001,Security Camera,0.9999783234165242,0.7,0.6,0.95,77.99830922648887,critical,priority_investigation,True
+Mirai,Mirai,gateway-001,IoT Gateway,0.9999783234165242,0.9,0.9,0.95,91.99800575432022,critical,priority_investigation,True
+Mirai,Mirai,medical-001,Medical IoT Device,0.9999783234165242,1.0,0.4,0.95,85.99813581382108,critical,priority_investigation,True
+Mirai,Mirai,industrial-001,Industrial Controller,0.9999783234165242,0.95,0.5,0.95,85.99813581382108,critical,priority_investigation,True
+Mirai,Mirai,,Unknown Device,0.9999783234165242,0.5,0.5,0.95,67.99852599232365,high,alert_and_investigate,False
+WebBased,WebBased,sensor-001,Temperature Sensor,0.9288185929611843,0.25,0.3,0.7977343575346049,44.49911762826239,medium,alert_and_investigate,True
+WebBased,WebBased,camera-001,Security Camera,0.9288185929611843,0.7,0.6,0.7977343575346049,66.79076385933081,high,alert_and_investigate,True
+WebBased,WebBased,gateway-001,IoT Gateway,0.9288185929611843,0.9,0.9,0.7977343575346049,79.79422416078741,critical,priority_investigation,True
+WebBased,WebBased,medical-001,Medical IoT Device,0.9288185929611843,1.0,0.4,0.7977343575346049,74.22131260302031,high,alert_and_investigate,True
+WebBased,WebBased,industrial-001,Industrial Controller,0.9288185929611843,0.95,0.5,0.7977343575346049,74.2213126030203,high,alert_and_investigate,True
+WebBased,WebBased,,Unknown Device,0.9288185929611843,0.5,0.5,0.7977343575346049,57.50257792971898,high,alert_and_investigate,False

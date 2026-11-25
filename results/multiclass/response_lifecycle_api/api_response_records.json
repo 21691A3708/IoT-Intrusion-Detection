@@ -1,0 +1,1352 @@
+[
+    {
+        "response_id": "2b73a059-776e-4349-b1fb-9ab29b71b5f0",
+        "status": "restricted",
+        "prediction": {
+            "predicted_label": 6,
+            "predicted_family": "Mirai",
+            "prediction": "attack",
+            "prediction_confidence": 1.0,
+            "candidate_attack_family": "Mirai",
+            "candidate_attack_probability": 1.0,
+            "benign_probability": 0.0,
+            "raw_attack_probability": 1.0,
+            "attack_probability": 0.9999783234165242,
+            "calibrated_attack_probability": 0.9999783234165242,
+            "class_probabilities": {
+                "Benign": 0.0,
+                "DDoS": 0.0,
+                "DoS": 0.0,
+                "Reconnaissance": 0.0,
+                "BruteForce": 0.0,
+                "Spoofing": 0.0,
+                "Mirai": 1.0,
+                "WebBased": 0.0
+            },
+            "class_probabilities_calibrated": false,
+            "detection_status": "high_confidence_attack",
+            "high_confidence_alert": true,
+            "alert_threshold": 0.9,
+            "model_version": "multiclass_rf_v3_calibrated",
+            "calibration_scope": "binary_attack_probability",
+            "calibration_independently_validated": false
+        },
+        "risk_assessment": {
+            "risk_policy_version": "context_risk_v1",
+            "risk_score": 53.9988294644923,
+            "risk_level": "high",
+            "attack_probability": 0.9999783234165242,
+            "device_context": {
+                "device_id": "sensor-001",
+                "device_name": "Temperature Sensor",
+                "device_type": "sensor",
+                "criticality": 0.25,
+                "exposure": 0.3,
+                "business_function": "Environmental monitoring",
+                "containment_allowed": true,
+                "context_known": true,
+                "context_source": "demonstration_inventory",
+                "identity_verified": false,
+                "simulation_only": true
+            },
+            "attack_impact": {
+                "expected_impact": 0.95,
+                "raw_attack_probability": 1.0,
+                "impact_contributions": [
+                    {
+                        "attack_family": "Mirai",
+                        "class_probability": 1.0,
+                        "conditional_probability": 1.0,
+                        "impact_score": 0.95,
+                        "weighted_contribution": 0.95
+                    },
+                    {
+                        "attack_family": "DDoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.9,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "DoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.75,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Reconnaissance",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.4,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "BruteForce",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.7,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Spoofing",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.8,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "WebBased",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.85,
+                        "weighted_contribution": 0.0
+                    }
+                ],
+                "impact_available": true,
+                "impact_policy_version": "attack_impact_v1",
+                "class_probabilities_calibrated": false
+            },
+            "risk_factors": {
+                "criticality": 0.25,
+                "attack_impact": 0.95,
+                "exposure": 0.3
+            },
+            "risk_weights": {
+                "criticality": 0.4,
+                "attack_impact": 0.4,
+                "exposure": 0.2
+            },
+            "risk_contributions": {
+                "criticality": 9.999783234165243,
+                "attack_impact": 37.99917628982792,
+                "exposure": 5.999869940499146
+            },
+            "risk_reconstruction": {
+                "contribution_sum": 53.99882946449231,
+                "error": 7.105427357601002e-15,
+                "passed": true
+            },
+            "recommended_action": "alert_and_investigate",
+            "requires_device_verification": true,
+            "containment_authorized": false,
+            "response_executed": false,
+            "warnings": [
+                "Risk weights and thresholds are provisional policy parameters.",
+                "Device context is demonstration-only.",
+                "Attack probability calibration has not been independently evaluated."
+            ]
+        },
+        "response_plan": {
+            "response_policy_version": "controlled_response_v1",
+            "model_version": "multiclass_rf_v3_calibrated",
+            "risk_policy_version": "context_risk_v1",
+            "predicted_family": "Mirai",
+            "attack_probability": 0.9999783234165242,
+            "family_confidence": 1.0,
+            "risk_score": 53.9988294644923,
+            "risk_level": "high",
+            "device_id": "sensor-001",
+            "device_name": "Temperature Sensor",
+            "incident_required": true,
+            "primary_action": "alert_and_investigate",
+            "attack_specific_recommendation": "Investigate possible botnet compromise and assess device isolation.",
+            "proposed_containment_action": "simulate_device_isolation",
+            "eligible_containment_action": null,
+            "containment_eligible": false,
+            "approval_required": false,
+            "approval_granted": false,
+            "containment_authorized": false,
+            "response_status": "restricted",
+            "requires_device_verification": true,
+            "safety_checks": {
+                "attack_probability_sufficient": true,
+                "risk_score_sufficient": false,
+                "family_confidence_sufficient": true,
+                "attack_family_predicted": true,
+                "family_has_validation_coverage": true,
+                "device_context_known": true,
+                "device_identity_verified": false,
+                "device_containment_allowed": true,
+                "device_identifier_available": true,
+                "attack_impact_available": true,
+                "containment_action_available": true
+            },
+            "restriction_reasons": [
+                "risk_score_sufficient",
+                "device_identity_verified"
+            ],
+            "simulation_only": true,
+            "response_executed": false,
+            "real_network_action_executed": false,
+            "warnings": [
+                "Policy thresholds are provisional.",
+                "Validation coverage does not guarantee correct attack classification.",
+                "Containment requires analyst approval.",
+                "No real network actions are permitted."
+            ]
+        },
+        "synthetic_fixture": false,
+        "approval": null,
+        "approval_granted": false,
+        "simulation_authorized": false,
+        "containment_authorized": false,
+        "execution": null,
+        "rollback": null,
+        "simulation_executed": false,
+        "response_executed": false,
+        "real_network_action_executed": false,
+        "incident_created": false,
+        "simulation_only": true,
+        "storage_mode": "in_memory",
+        "created_at": "2026-11-24T18:29:15.241997+00:00",
+        "updated_at": "2026-11-24T18:29:15.241997+00:00",
+        "audit_logs": [
+            {
+                "audit_id": "e6c0735d-d664-423d-bc4c-ba61e153bc79",
+                "response_id": "2b73a059-776e-4349-b1fb-9ab29b71b5f0",
+                "action": "response_created",
+                "actor": "system",
+                "actor_authenticated": false,
+                "previous_status": null,
+                "new_status": "restricted",
+                "details": {
+                    "containment_eligible": false,
+                    "restriction_reasons": [
+                        "risk_score_sufficient",
+                        "device_identity_verified"
+                    ],
+                    "synthetic_fixture": false
+                },
+                "timestamp": "2026-11-24T18:29:15.242030+00:00",
+                "simulation_only": true
+            }
+        ]
+    },
+    {
+        "response_id": "809665b1-5719-4340-95de-5374c72bc5fd",
+        "status": "restricted",
+        "prediction": {
+            "predicted_label": 6,
+            "predicted_family": "Mirai",
+            "prediction": "attack",
+            "prediction_confidence": 1.0,
+            "candidate_attack_family": "Mirai",
+            "candidate_attack_probability": 1.0,
+            "benign_probability": 0.0,
+            "raw_attack_probability": 1.0,
+            "attack_probability": 0.9999783234165242,
+            "calibrated_attack_probability": 0.9999783234165242,
+            "class_probabilities": {
+                "Benign": 0.0,
+                "DDoS": 0.0,
+                "DoS": 0.0,
+                "Reconnaissance": 0.0,
+                "BruteForce": 0.0,
+                "Spoofing": 0.0,
+                "Mirai": 1.0,
+                "WebBased": 0.0
+            },
+            "class_probabilities_calibrated": false,
+            "detection_status": "high_confidence_attack",
+            "high_confidence_alert": true,
+            "alert_threshold": 0.9,
+            "model_version": "multiclass_rf_v3_calibrated",
+            "calibration_scope": "binary_attack_probability",
+            "calibration_independently_validated": false
+        },
+        "risk_assessment": {
+            "risk_policy_version": "context_risk_v1",
+            "risk_score": 77.99830922648887,
+            "risk_level": "critical",
+            "attack_probability": 0.9999783234165242,
+            "device_context": {
+                "device_id": "camera-001",
+                "device_name": "Security Camera",
+                "device_type": "camera",
+                "criticality": 0.7,
+                "exposure": 0.6,
+                "business_function": "Physical security monitoring",
+                "containment_allowed": true,
+                "context_known": true,
+                "context_source": "demonstration_inventory",
+                "identity_verified": false,
+                "simulation_only": true
+            },
+            "attack_impact": {
+                "expected_impact": 0.95,
+                "raw_attack_probability": 1.0,
+                "impact_contributions": [
+                    {
+                        "attack_family": "Mirai",
+                        "class_probability": 1.0,
+                        "conditional_probability": 1.0,
+                        "impact_score": 0.95,
+                        "weighted_contribution": 0.95
+                    },
+                    {
+                        "attack_family": "DDoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.9,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "DoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.75,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Reconnaissance",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.4,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "BruteForce",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.7,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Spoofing",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.8,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "WebBased",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.85,
+                        "weighted_contribution": 0.0
+                    }
+                ],
+                "impact_available": true,
+                "impact_policy_version": "attack_impact_v1",
+                "class_probabilities_calibrated": false
+            },
+            "risk_factors": {
+                "criticality": 0.7,
+                "attack_impact": 0.95,
+                "exposure": 0.6
+            },
+            "risk_weights": {
+                "criticality": 0.4,
+                "attack_impact": 0.4,
+                "exposure": 0.2
+            },
+            "risk_contributions": {
+                "criticality": 27.99939305566268,
+                "attack_impact": 37.99917628982792,
+                "exposure": 11.999739880998291
+            },
+            "risk_reconstruction": {
+                "contribution_sum": 77.9983092264889,
+                "error": 2.842170943040401e-14,
+                "passed": true
+            },
+            "recommended_action": "priority_investigation",
+            "requires_device_verification": true,
+            "containment_authorized": false,
+            "response_executed": false,
+            "warnings": [
+                "Risk weights and thresholds are provisional policy parameters.",
+                "Device context is demonstration-only.",
+                "Attack probability calibration has not been independently evaluated."
+            ]
+        },
+        "response_plan": {
+            "response_policy_version": "controlled_response_v1",
+            "model_version": "multiclass_rf_v3_calibrated",
+            "risk_policy_version": "context_risk_v1",
+            "predicted_family": "Mirai",
+            "attack_probability": 0.9999783234165242,
+            "family_confidence": 1.0,
+            "risk_score": 77.99830922648887,
+            "risk_level": "critical",
+            "device_id": "camera-001",
+            "device_name": "Security Camera",
+            "incident_required": true,
+            "primary_action": "priority_investigation",
+            "attack_specific_recommendation": "Investigate possible botnet compromise and assess device isolation.",
+            "proposed_containment_action": "simulate_device_isolation",
+            "eligible_containment_action": null,
+            "containment_eligible": false,
+            "approval_required": false,
+            "approval_granted": false,
+            "containment_authorized": false,
+            "response_status": "restricted",
+            "requires_device_verification": true,
+            "safety_checks": {
+                "attack_probability_sufficient": true,
+                "risk_score_sufficient": true,
+                "family_confidence_sufficient": true,
+                "attack_family_predicted": true,
+                "family_has_validation_coverage": true,
+                "device_context_known": true,
+                "device_identity_verified": false,
+                "device_containment_allowed": true,
+                "device_identifier_available": true,
+                "attack_impact_available": true,
+                "containment_action_available": true
+            },
+            "restriction_reasons": [
+                "device_identity_verified"
+            ],
+            "simulation_only": true,
+            "response_executed": false,
+            "real_network_action_executed": false,
+            "warnings": [
+                "Policy thresholds are provisional.",
+                "Validation coverage does not guarantee correct attack classification.",
+                "Containment requires analyst approval.",
+                "No real network actions are permitted."
+            ]
+        },
+        "synthetic_fixture": false,
+        "approval": null,
+        "approval_granted": false,
+        "simulation_authorized": false,
+        "containment_authorized": false,
+        "execution": null,
+        "rollback": null,
+        "simulation_executed": false,
+        "response_executed": false,
+        "real_network_action_executed": false,
+        "incident_created": false,
+        "simulation_only": true,
+        "storage_mode": "in_memory",
+        "created_at": "2026-11-24T18:29:15.375759+00:00",
+        "updated_at": "2026-11-24T18:29:15.375759+00:00",
+        "audit_logs": [
+            {
+                "audit_id": "350b5ca4-00eb-4103-b725-bbb705d08f9a",
+                "response_id": "809665b1-5719-4340-95de-5374c72bc5fd",
+                "action": "response_created",
+                "actor": "system",
+                "actor_authenticated": false,
+                "previous_status": null,
+                "new_status": "restricted",
+                "details": {
+                    "containment_eligible": false,
+                    "restriction_reasons": [
+                        "device_identity_verified"
+                    ],
+                    "synthetic_fixture": false
+                },
+                "timestamp": "2026-11-24T18:29:15.375788+00:00",
+                "simulation_only": true
+            }
+        ]
+    },
+    {
+        "response_id": "cda9bd88-67ea-48c6-b209-f276e3575f26",
+        "status": "restricted",
+        "prediction": {
+            "predicted_label": 6,
+            "predicted_family": "Mirai",
+            "prediction": "attack",
+            "prediction_confidence": 1.0,
+            "candidate_attack_family": "Mirai",
+            "candidate_attack_probability": 1.0,
+            "benign_probability": 0.0,
+            "raw_attack_probability": 1.0,
+            "attack_probability": 0.9999783234165242,
+            "calibrated_attack_probability": 0.9999783234165242,
+            "class_probabilities": {
+                "Benign": 0.0,
+                "DDoS": 0.0,
+                "DoS": 0.0,
+                "Reconnaissance": 0.0,
+                "BruteForce": 0.0,
+                "Spoofing": 0.0,
+                "Mirai": 1.0,
+                "WebBased": 0.0
+            },
+            "class_probabilities_calibrated": false,
+            "detection_status": "high_confidence_attack",
+            "high_confidence_alert": true,
+            "alert_threshold": 0.9,
+            "model_version": "multiclass_rf_v3_calibrated",
+            "calibration_scope": "binary_attack_probability",
+            "calibration_independently_validated": false
+        },
+        "risk_assessment": {
+            "risk_policy_version": "context_risk_v1",
+            "risk_score": 91.99800575432022,
+            "risk_level": "critical",
+            "attack_probability": 0.9999783234165242,
+            "device_context": {
+                "device_id": "gateway-001",
+                "device_name": "IoT Gateway",
+                "device_type": "gateway",
+                "criticality": 0.9,
+                "exposure": 0.9,
+                "business_function": "IoT network communication",
+                "containment_allowed": false,
+                "context_known": true,
+                "context_source": "demonstration_inventory",
+                "identity_verified": false,
+                "simulation_only": true
+            },
+            "attack_impact": {
+                "expected_impact": 0.95,
+                "raw_attack_probability": 1.0,
+                "impact_contributions": [
+                    {
+                        "attack_family": "Mirai",
+                        "class_probability": 1.0,
+                        "conditional_probability": 1.0,
+                        "impact_score": 0.95,
+                        "weighted_contribution": 0.95
+                    },
+                    {
+                        "attack_family": "DDoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.9,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "DoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.75,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Reconnaissance",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.4,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "BruteForce",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.7,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Spoofing",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.8,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "WebBased",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.85,
+                        "weighted_contribution": 0.0
+                    }
+                ],
+                "impact_available": true,
+                "impact_policy_version": "attack_impact_v1",
+                "class_probabilities_calibrated": false
+            },
+            "risk_factors": {
+                "criticality": 0.9,
+                "attack_impact": 0.95,
+                "exposure": 0.9
+            },
+            "risk_weights": {
+                "criticality": 0.4,
+                "attack_impact": 0.4,
+                "exposure": 0.2
+            },
+            "risk_contributions": {
+                "criticality": 35.99921964299487,
+                "attack_impact": 37.99917628982792,
+                "exposure": 17.999609821497437
+            },
+            "risk_reconstruction": {
+                "contribution_sum": 91.99800575432025,
+                "error": 2.842170943040401e-14,
+                "passed": true
+            },
+            "recommended_action": "priority_investigation",
+            "requires_device_verification": true,
+            "containment_authorized": false,
+            "response_executed": false,
+            "warnings": [
+                "Risk weights and thresholds are provisional policy parameters.",
+                "Device context is demonstration-only.",
+                "Attack probability calibration has not been independently evaluated."
+            ]
+        },
+        "response_plan": {
+            "response_policy_version": "controlled_response_v1",
+            "model_version": "multiclass_rf_v3_calibrated",
+            "risk_policy_version": "context_risk_v1",
+            "predicted_family": "Mirai",
+            "attack_probability": 0.9999783234165242,
+            "family_confidence": 1.0,
+            "risk_score": 91.99800575432022,
+            "risk_level": "critical",
+            "device_id": "gateway-001",
+            "device_name": "IoT Gateway",
+            "incident_required": true,
+            "primary_action": "priority_investigation",
+            "attack_specific_recommendation": "Investigate possible botnet compromise and assess device isolation.",
+            "proposed_containment_action": "simulate_device_isolation",
+            "eligible_containment_action": null,
+            "containment_eligible": false,
+            "approval_required": false,
+            "approval_granted": false,
+            "containment_authorized": false,
+            "response_status": "restricted",
+            "requires_device_verification": true,
+            "safety_checks": {
+                "attack_probability_sufficient": true,
+                "risk_score_sufficient": true,
+                "family_confidence_sufficient": true,
+                "attack_family_predicted": true,
+                "family_has_validation_coverage": true,
+                "device_context_known": true,
+                "device_identity_verified": false,
+                "device_containment_allowed": false,
+                "device_identifier_available": true,
+                "attack_impact_available": true,
+                "containment_action_available": true
+            },
+            "restriction_reasons": [
+                "device_identity_verified",
+                "device_containment_allowed"
+            ],
+            "simulation_only": true,
+            "response_executed": false,
+            "real_network_action_executed": false,
+            "warnings": [
+                "Policy thresholds are provisional.",
+                "Validation coverage does not guarantee correct attack classification.",
+                "Containment requires analyst approval.",
+                "No real network actions are permitted."
+            ]
+        },
+        "synthetic_fixture": false,
+        "approval": null,
+        "approval_granted": false,
+        "simulation_authorized": false,
+        "containment_authorized": false,
+        "execution": null,
+        "rollback": null,
+        "simulation_executed": false,
+        "response_executed": false,
+        "real_network_action_executed": false,
+        "incident_created": false,
+        "simulation_only": true,
+        "storage_mode": "in_memory",
+        "created_at": "2026-11-24T18:29:15.515419+00:00",
+        "updated_at": "2026-11-24T18:29:15.515419+00:00",
+        "audit_logs": [
+            {
+                "audit_id": "4bea7363-3099-4d7b-bee2-8f2b838cf8d4",
+                "response_id": "cda9bd88-67ea-48c6-b209-f276e3575f26",
+                "action": "response_created",
+                "actor": "system",
+                "actor_authenticated": false,
+                "previous_status": null,
+                "new_status": "restricted",
+                "details": {
+                    "containment_eligible": false,
+                    "restriction_reasons": [
+                        "device_identity_verified",
+                        "device_containment_allowed"
+                    ],
+                    "synthetic_fixture": false
+                },
+                "timestamp": "2026-11-24T18:29:15.515454+00:00",
+                "simulation_only": true
+            }
+        ]
+    },
+    {
+        "response_id": "5779b6af-dc01-44a3-b1eb-6510bbeed9bf",
+        "status": "restricted",
+        "prediction": {
+            "predicted_label": 6,
+            "predicted_family": "Mirai",
+            "prediction": "attack",
+            "prediction_confidence": 1.0,
+            "candidate_attack_family": "Mirai",
+            "candidate_attack_probability": 1.0,
+            "benign_probability": 0.0,
+            "raw_attack_probability": 1.0,
+            "attack_probability": 0.9999783234165242,
+            "calibrated_attack_probability": 0.9999783234165242,
+            "class_probabilities": {
+                "Benign": 0.0,
+                "DDoS": 0.0,
+                "DoS": 0.0,
+                "Reconnaissance": 0.0,
+                "BruteForce": 0.0,
+                "Spoofing": 0.0,
+                "Mirai": 1.0,
+                "WebBased": 0.0
+            },
+            "class_probabilities_calibrated": false,
+            "detection_status": "high_confidence_attack",
+            "high_confidence_alert": true,
+            "alert_threshold": 0.9,
+            "model_version": "multiclass_rf_v3_calibrated",
+            "calibration_scope": "binary_attack_probability",
+            "calibration_independently_validated": false
+        },
+        "risk_assessment": {
+            "risk_policy_version": "context_risk_v1",
+            "risk_score": 85.99813581382108,
+            "risk_level": "critical",
+            "attack_probability": 0.9999783234165242,
+            "device_context": {
+                "device_id": "medical-001",
+                "device_name": "Medical IoT Device",
+                "device_type": "medical",
+                "criticality": 1.0,
+                "exposure": 0.4,
+                "business_function": "Patient monitoring",
+                "containment_allowed": false,
+                "context_known": true,
+                "context_source": "demonstration_inventory",
+                "identity_verified": false,
+                "simulation_only": true
+            },
+            "attack_impact": {
+                "expected_impact": 0.95,
+                "raw_attack_probability": 1.0,
+                "impact_contributions": [
+                    {
+                        "attack_family": "Mirai",
+                        "class_probability": 1.0,
+                        "conditional_probability": 1.0,
+                        "impact_score": 0.95,
+                        "weighted_contribution": 0.95
+                    },
+                    {
+                        "attack_family": "DDoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.9,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "DoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.75,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Reconnaissance",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.4,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "BruteForce",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.7,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Spoofing",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.8,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "WebBased",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.85,
+                        "weighted_contribution": 0.0
+                    }
+                ],
+                "impact_available": true,
+                "impact_policy_version": "attack_impact_v1",
+                "class_probabilities_calibrated": false
+            },
+            "risk_factors": {
+                "criticality": 1.0,
+                "attack_impact": 0.95,
+                "exposure": 0.4
+            },
+            "risk_weights": {
+                "criticality": 0.4,
+                "attack_impact": 0.4,
+                "exposure": 0.2
+            },
+            "risk_contributions": {
+                "criticality": 39.99913293666097,
+                "attack_impact": 37.99917628982792,
+                "exposure": 7.999826587332194
+            },
+            "risk_reconstruction": {
+                "contribution_sum": 85.99813581382108,
+                "error": 0.0,
+                "passed": true
+            },
+            "recommended_action": "priority_investigation",
+            "requires_device_verification": true,
+            "containment_authorized": false,
+            "response_executed": false,
+            "warnings": [
+                "Risk weights and thresholds are provisional policy parameters.",
+                "Device context is demonstration-only.",
+                "Attack probability calibration has not been independently evaluated."
+            ]
+        },
+        "response_plan": {
+            "response_policy_version": "controlled_response_v1",
+            "model_version": "multiclass_rf_v3_calibrated",
+            "risk_policy_version": "context_risk_v1",
+            "predicted_family": "Mirai",
+            "attack_probability": 0.9999783234165242,
+            "family_confidence": 1.0,
+            "risk_score": 85.99813581382108,
+            "risk_level": "critical",
+            "device_id": "medical-001",
+            "device_name": "Medical IoT Device",
+            "incident_required": true,
+            "primary_action": "priority_investigation",
+            "attack_specific_recommendation": "Investigate possible botnet compromise and assess device isolation.",
+            "proposed_containment_action": "simulate_device_isolation",
+            "eligible_containment_action": null,
+            "containment_eligible": false,
+            "approval_required": false,
+            "approval_granted": false,
+            "containment_authorized": false,
+            "response_status": "restricted",
+            "requires_device_verification": true,
+            "safety_checks": {
+                "attack_probability_sufficient": true,
+                "risk_score_sufficient": true,
+                "family_confidence_sufficient": true,
+                "attack_family_predicted": true,
+                "family_has_validation_coverage": true,
+                "device_context_known": true,
+                "device_identity_verified": false,
+                "device_containment_allowed": false,
+                "device_identifier_available": true,
+                "attack_impact_available": true,
+                "containment_action_available": true
+            },
+            "restriction_reasons": [
+                "device_identity_verified",
+                "device_containment_allowed"
+            ],
+            "simulation_only": true,
+            "response_executed": false,
+            "real_network_action_executed": false,
+            "warnings": [
+                "Policy thresholds are provisional.",
+                "Validation coverage does not guarantee correct attack classification.",
+                "Containment requires analyst approval.",
+                "No real network actions are permitted."
+            ]
+        },
+        "synthetic_fixture": false,
+        "approval": null,
+        "approval_granted": false,
+        "simulation_authorized": false,
+        "containment_authorized": false,
+        "execution": null,
+        "rollback": null,
+        "simulation_executed": false,
+        "response_executed": false,
+        "real_network_action_executed": false,
+        "incident_created": false,
+        "simulation_only": true,
+        "storage_mode": "in_memory",
+        "created_at": "2026-11-24T18:29:15.689905+00:00",
+        "updated_at": "2026-11-24T18:29:15.689905+00:00",
+        "audit_logs": [
+            {
+                "audit_id": "c8f01ff6-a227-4124-8e05-36e772a8837d",
+                "response_id": "5779b6af-dc01-44a3-b1eb-6510bbeed9bf",
+                "action": "response_created",
+                "actor": "system",
+                "actor_authenticated": false,
+                "previous_status": null,
+                "new_status": "restricted",
+                "details": {
+                    "containment_eligible": false,
+                    "restriction_reasons": [
+                        "device_identity_verified",
+                        "device_containment_allowed"
+                    ],
+                    "synthetic_fixture": false
+                },
+                "timestamp": "2026-11-24T18:29:15.689941+00:00",
+                "simulation_only": true
+            }
+        ]
+    },
+    {
+        "response_id": "ff1be94d-5f12-4d52-ac28-c9e13479620f",
+        "status": "restricted",
+        "prediction": {
+            "predicted_label": 6,
+            "predicted_family": "Mirai",
+            "prediction": "attack",
+            "prediction_confidence": 1.0,
+            "candidate_attack_family": "Mirai",
+            "candidate_attack_probability": 1.0,
+            "benign_probability": 0.0,
+            "raw_attack_probability": 1.0,
+            "attack_probability": 0.9999783234165242,
+            "calibrated_attack_probability": 0.9999783234165242,
+            "class_probabilities": {
+                "Benign": 0.0,
+                "DDoS": 0.0,
+                "DoS": 0.0,
+                "Reconnaissance": 0.0,
+                "BruteForce": 0.0,
+                "Spoofing": 0.0,
+                "Mirai": 1.0,
+                "WebBased": 0.0
+            },
+            "class_probabilities_calibrated": false,
+            "detection_status": "high_confidence_attack",
+            "high_confidence_alert": true,
+            "alert_threshold": 0.9,
+            "model_version": "multiclass_rf_v3_calibrated",
+            "calibration_scope": "binary_attack_probability",
+            "calibration_independently_validated": false
+        },
+        "risk_assessment": {
+            "risk_policy_version": "context_risk_v1",
+            "risk_score": 85.99813581382108,
+            "risk_level": "critical",
+            "attack_probability": 0.9999783234165242,
+            "device_context": {
+                "device_id": "industrial-001",
+                "device_name": "Industrial Controller",
+                "device_type": "industrial",
+                "criticality": 0.95,
+                "exposure": 0.5,
+                "business_function": "Industrial process control",
+                "containment_allowed": false,
+                "context_known": true,
+                "context_source": "demonstration_inventory",
+                "identity_verified": false,
+                "simulation_only": true
+            },
+            "attack_impact": {
+                "expected_impact": 0.95,
+                "raw_attack_probability": 1.0,
+                "impact_contributions": [
+                    {
+                        "attack_family": "Mirai",
+                        "class_probability": 1.0,
+                        "conditional_probability": 1.0,
+                        "impact_score": 0.95,
+                        "weighted_contribution": 0.95
+                    },
+                    {
+                        "attack_family": "DDoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.9,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "DoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.75,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Reconnaissance",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.4,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "BruteForce",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.7,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Spoofing",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.8,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "WebBased",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.85,
+                        "weighted_contribution": 0.0
+                    }
+                ],
+                "impact_available": true,
+                "impact_policy_version": "attack_impact_v1",
+                "class_probabilities_calibrated": false
+            },
+            "risk_factors": {
+                "criticality": 0.95,
+                "attack_impact": 0.95,
+                "exposure": 0.5
+            },
+            "risk_weights": {
+                "criticality": 0.4,
+                "attack_impact": 0.4,
+                "exposure": 0.2
+            },
+            "risk_contributions": {
+                "criticality": 37.99917628982792,
+                "attack_impact": 37.99917628982792,
+                "exposure": 9.999783234165243
+            },
+            "risk_reconstruction": {
+                "contribution_sum": 85.99813581382108,
+                "error": 0.0,
+                "passed": true
+            },
+            "recommended_action": "priority_investigation",
+            "requires_device_verification": true,
+            "containment_authorized": false,
+            "response_executed": false,
+            "warnings": [
+                "Risk weights and thresholds are provisional policy parameters.",
+                "Device context is demonstration-only.",
+                "Attack probability calibration has not been independently evaluated."
+            ]
+        },
+        "response_plan": {
+            "response_policy_version": "controlled_response_v1",
+            "model_version": "multiclass_rf_v3_calibrated",
+            "risk_policy_version": "context_risk_v1",
+            "predicted_family": "Mirai",
+            "attack_probability": 0.9999783234165242,
+            "family_confidence": 1.0,
+            "risk_score": 85.99813581382108,
+            "risk_level": "critical",
+            "device_id": "industrial-001",
+            "device_name": "Industrial Controller",
+            "incident_required": true,
+            "primary_action": "priority_investigation",
+            "attack_specific_recommendation": "Investigate possible botnet compromise and assess device isolation.",
+            "proposed_containment_action": "simulate_device_isolation",
+            "eligible_containment_action": null,
+            "containment_eligible": false,
+            "approval_required": false,
+            "approval_granted": false,
+            "containment_authorized": false,
+            "response_status": "restricted",
+            "requires_device_verification": true,
+            "safety_checks": {
+                "attack_probability_sufficient": true,
+                "risk_score_sufficient": true,
+                "family_confidence_sufficient": true,
+                "attack_family_predicted": true,
+                "family_has_validation_coverage": true,
+                "device_context_known": true,
+                "device_identity_verified": false,
+                "device_containment_allowed": false,
+                "device_identifier_available": true,
+                "attack_impact_available": true,
+                "containment_action_available": true
+            },
+            "restriction_reasons": [
+                "device_identity_verified",
+                "device_containment_allowed"
+            ],
+            "simulation_only": true,
+            "response_executed": false,
+            "real_network_action_executed": false,
+            "warnings": [
+                "Policy thresholds are provisional.",
+                "Validation coverage does not guarantee correct attack classification.",
+                "Containment requires analyst approval.",
+                "No real network actions are permitted."
+            ]
+        },
+        "synthetic_fixture": false,
+        "approval": null,
+        "approval_granted": false,
+        "simulation_authorized": false,
+        "containment_authorized": false,
+        "execution": null,
+        "rollback": null,
+        "simulation_executed": false,
+        "response_executed": false,
+        "real_network_action_executed": false,
+        "incident_created": false,
+        "simulation_only": true,
+        "storage_mode": "in_memory",
+        "created_at": "2026-11-24T18:29:15.857508+00:00",
+        "updated_at": "2026-11-24T18:29:15.857508+00:00",
+        "audit_logs": [
+            {
+                "audit_id": "300891d6-b329-4fa3-a46c-5e57673809a6",
+                "response_id": "ff1be94d-5f12-4d52-ac28-c9e13479620f",
+                "action": "response_created",
+                "actor": "system",
+                "actor_authenticated": false,
+                "previous_status": null,
+                "new_status": "restricted",
+                "details": {
+                    "containment_eligible": false,
+                    "restriction_reasons": [
+                        "device_identity_verified",
+                        "device_containment_allowed"
+                    ],
+                    "synthetic_fixture": false
+                },
+                "timestamp": "2026-11-24T18:29:15.857543+00:00",
+                "simulation_only": true
+            }
+        ]
+    },
+    {
+        "response_id": "6ce598df-f4ff-4a04-a99a-31d25f270d72",
+        "status": "restricted",
+        "prediction": {
+            "predicted_label": 6,
+            "predicted_family": "Mirai",
+            "prediction": "attack",
+            "prediction_confidence": 1.0,
+            "candidate_attack_family": "Mirai",
+            "candidate_attack_probability": 1.0,
+            "benign_probability": 0.0,
+            "raw_attack_probability": 1.0,
+            "attack_probability": 0.9999783234165242,
+            "calibrated_attack_probability": 0.9999783234165242,
+            "class_probabilities": {
+                "Benign": 0.0,
+                "DDoS": 0.0,
+                "DoS": 0.0,
+                "Reconnaissance": 0.0,
+                "BruteForce": 0.0,
+                "Spoofing": 0.0,
+                "Mirai": 1.0,
+                "WebBased": 0.0
+            },
+            "class_probabilities_calibrated": false,
+            "detection_status": "high_confidence_attack",
+            "high_confidence_alert": true,
+            "alert_threshold": 0.9,
+            "model_version": "multiclass_rf_v3_calibrated",
+            "calibration_scope": "binary_attack_probability",
+            "calibration_independently_validated": false
+        },
+        "risk_assessment": {
+            "risk_policy_version": "context_risk_v1",
+            "risk_score": 67.99852599232365,
+            "risk_level": "high",
+            "attack_probability": 0.9999783234165242,
+            "device_context": {
+                "device_id": null,
+                "device_name": "Unknown Device",
+                "device_type": "unknown",
+                "criticality": 0.5,
+                "exposure": 0.5,
+                "business_function": "Unknown",
+                "containment_allowed": false,
+                "requested_device_id": "unknown-device",
+                "context_known": false,
+                "context_source": "unknown_device_fallback",
+                "identity_verified": false,
+                "simulation_only": true
+            },
+            "attack_impact": {
+                "expected_impact": 0.95,
+                "raw_attack_probability": 1.0,
+                "impact_contributions": [
+                    {
+                        "attack_family": "Mirai",
+                        "class_probability": 1.0,
+                        "conditional_probability": 1.0,
+                        "impact_score": 0.95,
+                        "weighted_contribution": 0.95
+                    },
+                    {
+                        "attack_family": "DDoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.9,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "DoS",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.75,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Reconnaissance",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.4,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "BruteForce",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.7,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "Spoofing",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.8,
+                        "weighted_contribution": 0.0
+                    },
+                    {
+                        "attack_family": "WebBased",
+                        "class_probability": 0.0,
+                        "conditional_probability": 0.0,
+                        "impact_score": 0.85,
+                        "weighted_contribution": 0.0
+                    }
+                ],
+                "impact_available": true,
+                "impact_policy_version": "attack_impact_v1",
+                "class_probabilities_calibrated": false
+            },
+            "risk_factors": {
+                "criticality": 0.5,
+                "attack_impact": 0.95,
+                "exposure": 0.5
+            },
+            "risk_weights": {
+                "criticality": 0.4,
+                "attack_impact": 0.4,
+                "exposure": 0.2
+            },
+            "risk_contributions": {
+                "criticality": 19.999566468330485,
+                "attack_impact": 37.99917628982792,
+                "exposure": 9.999783234165243
+            },
+            "risk_reconstruction": {
+                "contribution_sum": 67.99852599232365,
+                "error": 0.0,
+                "passed": true
+            },
+            "recommended_action": "alert_and_investigate",
+            "requires_device_verification": true,
+            "containment_authorized": false,
+            "response_executed": false,
+            "warnings": [
+                "Risk weights and thresholds are provisional policy parameters.",
+                "Device context is demonstration-only.",
+                "Attack probability calibration has not been independently evaluated.",
+                "Unknown device: fallback criticality and exposure were used."
+            ]
+        },
+        "response_plan": {
+            "response_policy_version": "controlled_response_v1",
+            "model_version": "multiclass_rf_v3_calibrated",
+            "risk_policy_version": "context_risk_v1",
+            "predicted_family": "Mirai",
+            "attack_probability": 0.9999783234165242,
+            "family_confidence": 1.0,
+            "risk_score": 67.99852599232365,
+            "risk_level": "high",
+            "device_id": null,
+            "device_name": "Unknown Device",
+            "incident_required": true,
+            "primary_action": "alert_and_investigate",
+            "attack_specific_recommendation": "Investigate possible botnet compromise and assess device isolation.",
+            "proposed_containment_action": "simulate_device_isolation",
+            "eligible_containment_action": null,
+            "containment_eligible": false,
+            "approval_required": false,
+            "approval_granted": false,
+            "containment_authorized": false,
+            "response_status": "restricted",
+            "requires_device_verification": true,
+            "safety_checks": {
+                "attack_probability_sufficient": true,
+                "risk_score_sufficient": false,
+                "family_confidence_sufficient": true,
+                "attack_family_predicted": true,
+                "family_has_validation_coverage": true,
+                "device_context_known": false,
+                "device_identity_verified": false,
+                "device_containment_allowed": false,
+                "device_identifier_available": false,
+                "attack_impact_available": true,
+                "containment_action_available": true
+            },
+            "restriction_reasons": [
+                "risk_score_sufficient",
+                "device_context_known",
+                "device_identity_verified",
+                "device_containment_allowed",
+                "device_identifier_available"
+            ],
+            "simulation_only": true,
+            "response_executed": false,
+            "real_network_action_executed": false,
+            "warnings": [
+                "Policy thresholds are provisional.",
+                "Validation coverage does not guarantee correct attack classification.",
+                "Containment requires analyst approval.",
+                "No real network actions are permitted."
+            ]
+        },
+        "synthetic_fixture": false,
+        "approval": null,
+        "approval_granted": false,
+        "simulation_authorized": false,
+        "containment_authorized": false,
+        "execution": null,
+        "rollback": null,
+        "simulation_executed": false,
+        "response_executed": false,
+        "real_network_action_executed": false,
+        "incident_created": false,
+        "simulation_only": true,
+        "storage_mode": "in_memory",
+        "created_at": "2026-11-24T18:29:15.967973+00:00",
+        "updated_at": "2026-11-24T18:29:15.967973+00:00",
+        "audit_logs": [
+            {
+                "audit_id": "8d0b424a-2ea7-463d-841e-c269623b08df",
+                "response_id": "6ce598df-f4ff-4a04-a99a-31d25f270d72",
+                "action": "response_created",
+                "actor": "system",
+                "actor_authenticated": false,
+                "previous_status": null,
+                "new_status": "restricted",
+                "details": {
+                    "containment_eligible": false,
+                    "restriction_reasons": [
+                        "risk_score_sufficient",
+                        "device_context_known",
+                        "device_identity_verified",
+                        "device_containment_allowed",
+                        "device_identifier_available"
+                    ],
+                    "synthetic_fixture": false
+                },
+                "timestamp": "2026-11-24T18:29:15.968016+00:00",
+                "simulation_only": true
+            }
+        ]
+    }
+]

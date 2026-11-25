@@ -5,7 +5,9 @@ from uuid import UUID
 from fastapi.encoders import jsonable_encoder
 import numpy as np
 import pandas as pd
-
+from .multiclass_router import router as multiclass_router
+from .response_lifecycle_router import router as response_lifecycle_router
+from .persistent_response_router import router as persistent_response_router
 from fastapi import (
     FastAPI,
     HTTPException,
@@ -40,6 +42,9 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.include_router(multiclass_router)
+app.include_router(response_lifecycle_router)
+app.include_router(persistent_response_router)
 # Reuse one agent instance for chatbot requests.
 assistant_agent = IoTSecurityAgent()
 

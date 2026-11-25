@@ -1,0 +1,3 @@
+AttackFamily,OriginalAttack,train,validation,test
+Reconnaissance,VulnerabilityScan,0,1,0
+WebBased,XSS,0,1,0

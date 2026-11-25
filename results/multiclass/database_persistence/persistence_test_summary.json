@@ -1,0 +1,68 @@
+[
+    {
+        "DeviceID": "sensor-001",
+        "PredictedFamily": "Mirai",
+        "RiskScore": 53.9988294644923,
+        "RiskLevel": "high",
+        "ResponseStatus": "restricted",
+        "IncidentCreatedInTransaction": true,
+        "AuditEvents": 1,
+        "DatabaseWriteTest": "PASSED",
+        "PermanentStorage": false
+    },
+    {
+        "DeviceID": "camera-001",
+        "PredictedFamily": "Mirai",
+        "RiskScore": 77.99830922648887,
+        "RiskLevel": "critical",
+        "ResponseStatus": "restricted",
+        "IncidentCreatedInTransaction": true,
+        "AuditEvents": 1,
+        "DatabaseWriteTest": "PASSED",
+        "PermanentStorage": false
+    },
+    {
+        "DeviceID": "gateway-001",
+        "PredictedFamily": "Mirai",
+        "RiskScore": 91.99800575432022,
+        "RiskLevel": "critical",
+        "ResponseStatus": "restricted",
+        "IncidentCreatedInTransaction": true,
+        "AuditEvents": 1,
+        "DatabaseWriteTest": "PASSED",
+        "PermanentStorage": false
+    },
+    {
+        "DeviceID": "medical-001",
+        "PredictedFamily": "Mirai",
+        "RiskScore": 85.99813581382108,
+        "RiskLevel": "critical",
+        "ResponseStatus": "restricted",
+        "IncidentCreatedInTransaction": true,
+        "AuditEvents": 1,
+        "DatabaseWriteTest": "PASSED",
+        "PermanentStorage": false
+    },
+    {
+        "DeviceID": "industrial-001",
+        "PredictedFamily": "Mirai",
+        "RiskScore": 85.99813581382108,
+        "RiskLevel": "critical",
+        "ResponseStatus": "restricted",
+        "IncidentCreatedInTransaction": true,
+        "AuditEvents": 1,
+        "DatabaseWriteTest": "PASSED",
+        "PermanentStorage": false
+    },
+    {
+        "DeviceID": "unknown-device",
+        "PredictedFamily": "Mirai",
+        "RiskScore": 67.99852599232365,
+        "RiskLevel": "high",
+        "ResponseStatus": "restricted",
+        "IncidentCreatedInTransaction": true,
+        "AuditEvents": 1,
+        "DatabaseWriteTest": "PASSED",
+        "PermanentStorage": false
+    }
+]

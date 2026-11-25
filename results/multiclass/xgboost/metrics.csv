@@ -1,0 +1,2 @@
+Model,EvaluationSplit,TrainingRows,ValidationRows,FeatureCount,ModelClasses,EvaluatedClasses,Accuracy,BalancedAccuracy,MacroPrecision,MacroRecall,MacroF1,WeightedF1,LogLoss,TrainingSeconds,PredictionSeconds,BestIteration,AttackFalsePositiveRate
+XGBoost_Multiclass,validation,872867,182398,36,8,7,0.8853057599315782,0.6859476426412865,0.7202525028547424,0.6859476426412865,0.6587044550746001,0.8856127458670011,0.3216039836406708,33.77096749999964,0.41371970000000147,63,0.18465852193070298

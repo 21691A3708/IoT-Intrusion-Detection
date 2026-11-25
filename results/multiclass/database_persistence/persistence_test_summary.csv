@@ -1,0 +1,7 @@
+DeviceID,PredictedFamily,RiskScore,RiskLevel,ResponseStatus,IncidentCreatedInTransaction,AuditEvents,DatabaseWriteTest,PermanentStorage
+sensor-001,Mirai,53.9988294644923,high,restricted,True,1,PASSED,False
+camera-001,Mirai,77.99830922648887,critical,restricted,True,1,PASSED,False
+gateway-001,Mirai,91.99800575432022,critical,restricted,True,1,PASSED,False
+medical-001,Mirai,85.99813581382108,critical,restricted,True,1,PASSED,False
+industrial-001,Mirai,85.99813581382108,critical,restricted,True,1,PASSED,False
+unknown-device,Mirai,67.99852599232365,high,restricted,True,1,PASSED,False

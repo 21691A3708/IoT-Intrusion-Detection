@@ -27,6 +27,9 @@ from app.database import (
     check_database_connection,
     SessionLocal,
 )
+from .incident_management_router import (
+    router as incident_management_router,
+)
 
 from app.ml_service import (
     EXPECTED_FEATURES,
@@ -45,6 +48,7 @@ app = FastAPI(
 app.include_router(multiclass_router)
 app.include_router(response_lifecycle_router)
 app.include_router(persistent_response_router)
+app.include_router(incident_management_router)
 # Reuse one agent instance for chatbot requests.
 assistant_agent = IoTSecurityAgent()
 

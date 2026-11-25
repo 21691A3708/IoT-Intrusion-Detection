@@ -1,0 +1,7 @@
+ResponseID,DeviceID,PredictedFamily,RiskScore,RiskLevel,Status,ApprovalGranted,SimulationExecuted,RealNetworkActionExecuted,AuditEvents
+2b73a059-776e-4349-b1fb-9ab29b71b5f0,sensor-001,Mirai,53.9988294644923,high,restricted,False,False,False,1
+809665b1-5719-4340-95de-5374c72bc5fd,camera-001,Mirai,77.99830922648887,critical,restricted,False,False,False,1
+cda9bd88-67ea-48c6-b209-f276e3575f26,gateway-001,Mirai,91.99800575432022,critical,restricted,False,False,False,1
+5779b6af-dc01-44a3-b1eb-6510bbeed9bf,medical-001,Mirai,85.99813581382108,critical,restricted,False,False,False,1
+ff1be94d-5f12-4d52-ac28-c9e13479620f,industrial-001,Mirai,85.99813581382108,critical,restricted,False,False,False,1
+6ce598df-f4ff-4a04-a99a-31d25f270d72,,Mirai,67.99852599232365,high,restricted,False,False,False,1

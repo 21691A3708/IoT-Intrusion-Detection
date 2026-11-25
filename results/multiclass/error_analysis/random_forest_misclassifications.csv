@@ -1,0 +1,8 @@
+AttackFamily,Benign,BruteForce,DDoS,DoS,Mirai,Reconnaissance,Spoofing,WebBased
+Benign,0,231,0,0,0,280,38,324
+DDoS,0,0,0,8346,40,0,0,3
+DoS,0,0,2299,0,11,0,0,0
+Mirai,1,0,107,5,0,0,0,7
+Reconnaissance,721,405,0,0,0,0,65,2028
+Spoofing,2832,95,0,0,0,887,0,140
+WebBased,456,193,0,0,0,150,89,0

@@ -1,0 +1,4 @@
+Split,OriginalRows,ConflictingRowsRemoved,InternalDuplicatesRemoved,CrossSplitDuplicatesRemoved,FinalRows,CaptureOverlap
+train,1034724,71843,90014,0,872867,0
+validation,226286,3746,11383,28759,182398,0
+test,228879,5962,7322,27252,188343,0

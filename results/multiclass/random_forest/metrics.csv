@@ -1,0 +1,2 @@
+Model,EvaluationSplit,TrainingRows,ValidationRows,FeatureCount,ModelClasses,EvaluatedClasses,Accuracy,BalancedAccuracy,MacroPrecision,MacroRecall,MacroF1,WeightedF1,LogLoss,TrainingSeconds,PredictionSeconds,AttackFalsePositiveRate
+RandomForest_Multiclass,validation,872867,182398,36,8,7,0.8917038564019343,0.6972405949111765,0.7228843862286346,0.6972405949111765,0.6649008323322899,0.8903706141632977,0.6934142676334939,32.60215650000009,0.528650899999775,0.17484478269577408

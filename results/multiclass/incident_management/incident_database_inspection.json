@@ -1,0 +1,211 @@
+{
+    "tables": [
+        "incidents",
+        "predictions",
+        "response_audit_logs",
+        "response_records",
+        "risk_assessments"
+    ],
+    "columns": [
+        {
+            "table_name": "incidents",
+            "column_name": "id",
+            "data_type": "uuid",
+            "is_nullable": "NO",
+            "column_default": "gen_random_uuid()"
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "risk_assessment_id",
+            "data_type": "uuid",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "title",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "description",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "column_default": null
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "severity",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "status",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "column_default": "'open'::text"
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "assigned_to",
+            "data_type": "uuid",
+            "is_nullable": "YES",
+            "column_default": null
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "resolved_at",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "YES",
+            "column_default": null
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "column_default": "now()"
+        },
+        {
+            "table_name": "incidents",
+            "column_name": "updated_at",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "column_default": "now()"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "id",
+            "data_type": "uuid",
+            "is_nullable": "NO",
+            "column_default": "gen_random_uuid()"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "response_id",
+            "data_type": "uuid",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "event_sequence",
+            "data_type": "integer",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "actor_user_id",
+            "data_type": "uuid",
+            "is_nullable": "YES",
+            "column_default": null
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "actor_name",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "actor_authenticated",
+            "data_type": "boolean",
+            "is_nullable": "NO",
+            "column_default": "false"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "action",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "previous_status",
+            "data_type": "text",
+            "is_nullable": "YES",
+            "column_default": null
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "new_status",
+            "data_type": "text",
+            "is_nullable": "NO",
+            "column_default": null
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "details",
+            "data_type": "jsonb",
+            "is_nullable": "NO",
+            "column_default": "'{}'::jsonb"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "simulation_only",
+            "data_type": "boolean",
+            "is_nullable": "NO",
+            "column_default": "true"
+        },
+        {
+            "table_name": "response_audit_logs",
+            "column_name": "created_at",
+            "data_type": "timestamp with time zone",
+            "is_nullable": "NO",
+            "column_default": "now()"
+        }
+    ],
+    "incident_distribution": [
+        {
+            "status": "open",
+            "severity": "critical",
+            "total_incidents": 4
+        },
+        {
+            "status": "open",
+            "severity": "high",
+            "total_incidents": 2
+        }
+    ],
+    "constraints": [
+        {
+            "constraint_name": "incidents_assigned_to_fkey",
+            "definition": "FOREIGN KEY (assigned_to) REFERENCES auth.users(id) ON DELETE SET NULL"
+        },
+        {
+            "constraint_name": "incidents_pkey",
+            "definition": "PRIMARY KEY (id)"
+        },
+        {
+            "constraint_name": "incidents_risk_assessment_id_fkey",
+            "definition": "FOREIGN KEY (risk_assessment_id) REFERENCES multiclass.risk_assessments(id) ON DELETE RESTRICT"
+        },
+        {
+            "constraint_name": "incidents_risk_assessment_id_key",
+            "definition": "UNIQUE (risk_assessment_id)"
+        },
+        {
+            "constraint_name": "mc_incident_severity_check",
+            "definition": "CHECK ((severity = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])))"
+        },
+        {
+            "constraint_name": "mc_incident_status_check",
+            "definition": "CHECK ((status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'investigating'::text, 'resolved'::text, 'false_positive'::text])))"
+        }
+    ],
+    "incident_audit_table_exists": false,
+    "record_counts": {
+        "predictions": 7,
+        "risk_assessments": 7,
+        "incidents": 6,
+        "response_records": 7,
+        "response_audit_logs": 7
+    }
+}

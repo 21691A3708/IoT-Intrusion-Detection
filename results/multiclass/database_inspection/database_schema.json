@@ -1,0 +1,686 @@
+{
+    "inspection_time": "2026-11-25T07:02:52.493503+00:00",
+    "database_type": "PostgreSQL",
+    "schema": "public",
+    "tables": [
+        {
+            "table_name": "user_profiles",
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "UUID",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "display_name",
+                    "type": "TEXT",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "role",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": "'analyst'::text",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "created_at",
+                    "type": "TIMESTAMP",
+                    "nullable": false,
+                    "default": "now()",
+                    "identity": null,
+                    "computed": null
+                }
+            ],
+            "primary_key": {
+                "constrained_columns": [
+                    "id"
+                ],
+                "name": "user_profiles_pkey",
+                "comment": null,
+                "dialect_options": {
+                    "postgresql_include": []
+                }
+            },
+            "foreign_keys": [
+                {
+                    "name": "user_profiles_id_fkey",
+                    "constrained_columns": [
+                        "id"
+                    ],
+                    "referred_schema": "auth",
+                    "referred_table": "users",
+                    "referred_columns": [
+                        "id"
+                    ],
+                    "options": {
+                        "ondelete": "CASCADE"
+                    },
+                    "comment": null
+                }
+            ],
+            "unique_constraints": [],
+            "check_constraints": [
+                {
+                    "name": "user_profiles_role_check",
+                    "sqltext": "role = ANY (ARRAY['admin'::text, 'analyst'::text, 'viewer'::text])",
+                    "comment": null
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "table_name": "devices",
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "UUID",
+                    "nullable": false,
+                    "default": "gen_random_uuid()",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "device_name",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "device_identifier",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "device_type",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": "'iot'::text",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "location",
+                    "type": "TEXT",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "status",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": "'unknown'::text",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "last_seen_at",
+                    "type": "TIMESTAMP",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "created_at",
+                    "type": "TIMESTAMP",
+                    "nullable": false,
+                    "default": "now()",
+                    "identity": null,
+                    "computed": null
+                }
+            ],
+            "primary_key": {
+                "constrained_columns": [
+                    "id"
+                ],
+                "name": "devices_pkey",
+                "comment": null,
+                "dialect_options": {
+                    "postgresql_include": []
+                }
+            },
+            "foreign_keys": [],
+            "unique_constraints": [
+                {
+                    "column_names": [
+                        "device_identifier"
+                    ],
+                    "name": "devices_device_identifier_key",
+                    "comment": null,
+                    "dialect_options": {
+                        "postgresql_include": [],
+                        "postgresql_nulls_not_distinct": false
+                    }
+                }
+            ],
+            "check_constraints": [
+                {
+                    "name": "devices_status_check",
+                    "sqltext": "status = ANY (ARRAY['online'::text, 'offline'::text, 'unknown'::text, 'quarantined'::text])",
+                    "comment": null
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "devices_device_identifier_key",
+                    "unique": true,
+                    "column_names": [
+                        "device_identifier"
+                    ],
+                    "duplicates_constraint": "devices_device_identifier_key",
+                    "dialect_options": {
+                        "postgresql_include": []
+                    }
+                }
+            ]
+        },
+        {
+            "table_name": "predictions",
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "UUID",
+                    "nullable": false,
+                    "default": "gen_random_uuid()",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "device_id",
+                    "type": "UUID",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "predicted_label",
+                    "type": "SMALLINT",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "attack_probability",
+                    "type": "DOUBLE PRECISION",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "risk_level",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "source",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "features",
+                    "type": "JSONB",
+                    "nullable": false,
+                    "default": "'{}'::jsonb",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "model_version",
+                    "type": "TEXT",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "created_at",
+                    "type": "TIMESTAMP",
+                    "nullable": false,
+                    "default": "now()",
+                    "identity": null,
+                    "computed": null
+                }
+            ],
+            "primary_key": {
+                "constrained_columns": [
+                    "id"
+                ],
+                "name": "predictions_pkey",
+                "comment": null,
+                "dialect_options": {
+                    "postgresql_include": []
+                }
+            },
+            "foreign_keys": [
+                {
+                    "name": "predictions_device_id_fkey",
+                    "constrained_columns": [
+                        "device_id"
+                    ],
+                    "referred_schema": "public",
+                    "referred_table": "devices",
+                    "referred_columns": [
+                        "id"
+                    ],
+                    "options": {
+                        "ondelete": "SET NULL"
+                    },
+                    "comment": null
+                }
+            ],
+            "unique_constraints": [],
+            "check_constraints": [
+                {
+                    "name": "predictions_attack_probability_check",
+                    "sqltext": "attack_probability >= 0::double precision AND attack_probability <= 1::double precision",
+                    "comment": null
+                },
+                {
+                    "name": "predictions_predicted_label_check",
+                    "sqltext": "predicted_label = ANY (ARRAY[0, 1])",
+                    "comment": null
+                },
+                {
+                    "name": "predictions_risk_level_check",
+                    "sqltext": "risk_level = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])",
+                    "comment": null
+                },
+                {
+                    "name": "predictions_source_check",
+                    "sqltext": "source = ANY (ARRAY['csv_upload'::text, 'simulator'::text, 'device'::text])",
+                    "comment": null
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "idx_predictions_created_at",
+                    "unique": false,
+                    "column_names": [
+                        "created_at"
+                    ],
+                    "column_sorting": {
+                        "created_at": [
+                            "desc"
+                        ]
+                    },
+                    "dialect_options": {
+                        "postgresql_include": []
+                    }
+                },
+                {
+                    "name": "idx_predictions_risk",
+                    "unique": false,
+                    "column_names": [
+                        "risk_level",
+                        "created_at"
+                    ],
+                    "column_sorting": {
+                        "created_at": [
+                            "desc"
+                        ]
+                    },
+                    "dialect_options": {
+                        "postgresql_include": []
+                    }
+                }
+            ]
+        },
+        {
+            "table_name": "incidents",
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "UUID",
+                    "nullable": false,
+                    "default": "gen_random_uuid()",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "prediction_id",
+                    "type": "UUID",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "device_id",
+                    "type": "UUID",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "title",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "description",
+                    "type": "TEXT",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "severity",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "status",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": "'open'::text",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "assigned_to",
+                    "type": "UUID",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "resolved_at",
+                    "type": "TIMESTAMP",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "created_at",
+                    "type": "TIMESTAMP",
+                    "nullable": false,
+                    "default": "now()",
+                    "identity": null,
+                    "computed": null
+                }
+            ],
+            "primary_key": {
+                "constrained_columns": [
+                    "id"
+                ],
+                "name": "incidents_pkey",
+                "comment": null,
+                "dialect_options": {
+                    "postgresql_include": []
+                }
+            },
+            "foreign_keys": [
+                {
+                    "name": "incidents_assigned_to_fkey",
+                    "constrained_columns": [
+                        "assigned_to"
+                    ],
+                    "referred_schema": "auth",
+                    "referred_table": "users",
+                    "referred_columns": [
+                        "id"
+                    ],
+                    "options": {
+                        "ondelete": "SET NULL"
+                    },
+                    "comment": null
+                },
+                {
+                    "name": "incidents_device_id_fkey",
+                    "constrained_columns": [
+                        "device_id"
+                    ],
+                    "referred_schema": "public",
+                    "referred_table": "devices",
+                    "referred_columns": [
+                        "id"
+                    ],
+                    "options": {
+                        "ondelete": "SET NULL"
+                    },
+                    "comment": null
+                },
+                {
+                    "name": "incidents_prediction_id_fkey",
+                    "constrained_columns": [
+                        "prediction_id"
+                    ],
+                    "referred_schema": "public",
+                    "referred_table": "predictions",
+                    "referred_columns": [
+                        "id"
+                    ],
+                    "options": {
+                        "ondelete": "SET NULL"
+                    },
+                    "comment": null
+                }
+            ],
+            "unique_constraints": [],
+            "check_constraints": [
+                {
+                    "name": "incidents_severity_check",
+                    "sqltext": "severity = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'critical'::text])",
+                    "comment": null
+                },
+                {
+                    "name": "incidents_status_check",
+                    "sqltext": "status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'investigating'::text, 'resolved'::text, 'false_positive'::text])",
+                    "comment": null
+                }
+            ],
+            "indexes": [
+                {
+                    "name": "idx_incidents_severity",
+                    "unique": false,
+                    "column_names": [
+                        "severity",
+                        "created_at"
+                    ],
+                    "column_sorting": {
+                        "created_at": [
+                            "desc"
+                        ]
+                    },
+                    "dialect_options": {
+                        "postgresql_include": []
+                    }
+                },
+                {
+                    "name": "idx_incidents_status",
+                    "unique": false,
+                    "column_names": [
+                        "status",
+                        "created_at"
+                    ],
+                    "column_sorting": {
+                        "created_at": [
+                            "desc"
+                        ]
+                    },
+                    "dialect_options": {
+                        "postgresql_include": []
+                    }
+                }
+            ]
+        },
+        {
+            "table_name": "incident_audit_logs",
+            "columns": [
+                {
+                    "name": "id",
+                    "type": "UUID",
+                    "nullable": false,
+                    "default": "gen_random_uuid()",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "incident_id",
+                    "type": "UUID",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "actor_user_id",
+                    "type": "UUID",
+                    "nullable": true,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "action",
+                    "type": "TEXT",
+                    "nullable": false,
+                    "default": null,
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "details",
+                    "type": "JSONB",
+                    "nullable": false,
+                    "default": "'{}'::jsonb",
+                    "identity": null,
+                    "computed": null
+                },
+                {
+                    "name": "created_at",
+                    "type": "TIMESTAMP",
+                    "nullable": false,
+                    "default": "now()",
+                    "identity": null,
+                    "computed": null
+                }
+            ],
+            "primary_key": {
+                "constrained_columns": [
+                    "id"
+                ],
+                "name": "incident_audit_logs_pkey",
+                "comment": null,
+                "dialect_options": {
+                    "postgresql_include": []
+                }
+            },
+            "foreign_keys": [
+                {
+                    "name": "incident_audit_logs_actor_user_id_fkey",
+                    "constrained_columns": [
+                        "actor_user_id"
+                    ],
+                    "referred_schema": "auth",
+                    "referred_table": "users",
+                    "referred_columns": [
+                        "id"
+                    ],
+                    "options": {
+                        "ondelete": "SET NULL"
+                    },
+                    "comment": null
+                },
+                {
+                    "name": "incident_audit_logs_incident_id_fkey",
+                    "constrained_columns": [
+                        "incident_id"
+                    ],
+                    "referred_schema": "public",
+                    "referred_table": "incidents",
+                    "referred_columns": [
+                        "id"
+                    ],
+                    "options": {
+                        "ondelete": "CASCADE"
+                    },
+                    "comment": null
+                }
+            ],
+            "unique_constraints": [],
+            "check_constraints": [],
+            "indexes": [
+                {
+                    "name": "idx_audit_incident",
+                    "unique": false,
+                    "column_names": [
+                        "incident_id",
+                        "created_at"
+                    ],
+                    "column_sorting": {
+                        "created_at": [
+                            "desc"
+                        ]
+                    },
+                    "dialect_options": {
+                        "postgresql_include": []
+                    }
+                }
+            ]
+        }
+    ],
+    "row_level_security": [
+        {
+            "table_name": "devices",
+            "rls_enabled": true,
+            "rls_forced": false
+        },
+        {
+            "table_name": "incident_audit_logs",
+            "rls_enabled": true,
+            "rls_forced": false
+        },
+        {
+            "table_name": "incidents",
+            "rls_enabled": true,
+            "rls_forced": false
+        },
+        {
+            "table_name": "predictions",
+            "rls_enabled": true,
+            "rls_forced": false
+        },
+        {
+            "table_name": "user_profiles",
+            "rls_enabled": true,
+            "rls_forced": false
+        }
+    ],
+    "rls_policies": [],
+    "triggers": []
+}

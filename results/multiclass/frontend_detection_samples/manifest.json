@@ -1,0 +1,37 @@
+[
+  {
+    "file": "benign.json",
+    "expected_family": "Benign",
+    "source": "verified_validation_dataset"
+  },
+  {
+    "file": "ddos.json",
+    "expected_family": "DDoS",
+    "source": "verified_validation_dataset"
+  },
+  {
+    "file": "dos.json",
+    "expected_family": "DoS",
+    "source": "verified_validation_dataset"
+  },
+  {
+    "file": "reconnaissance.json",
+    "expected_family": "Reconnaissance",
+    "source": "verified_validation_dataset"
+  },
+  {
+    "file": "spoofing.json",
+    "expected_family": "Spoofing",
+    "source": "verified_validation_dataset"
+  },
+  {
+    "file": "mirai.json",
+    "expected_family": "Mirai",
+    "source": "verified_validation_dataset"
+  },
+  {
+    "file": "webbased.json",
+    "expected_family": "WebBased",
+    "source": "verified_validation_dataset"
+  }
+]

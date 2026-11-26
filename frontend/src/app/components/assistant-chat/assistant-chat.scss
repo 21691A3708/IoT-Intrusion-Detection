@@ -355,3 +355,10 @@
     height: 54px;
   }
 }
+
+/* Phase 11.5.9 responsive refinement */
+.assistant-widget { right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); }
+.chat-launcher { width: 48px; height: 48px; }
+.chat-window { width: min(390px, calc(100vw - 40px)); height: min(570px, calc(100dvh - 100px)); margin-bottom: 10px; }
+.message-list { min-height: 0; }
+@media (max-width: 600px) { .chat-window { width: calc(100vw - 40px); } }

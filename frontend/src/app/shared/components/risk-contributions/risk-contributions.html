@@ -1,0 +1,356 @@
+﻿<section class="contribution-panel">
+
+  <!-- Header -->
+
+  <header class="panel-header">
+
+    <div class="header-icon" aria-hidden="true">
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M3 3v18h18"/>
+        <path d="M8 16v-3"/>
+        <path d="M13 16V8"/>
+        <path d="M18 16V4"/>
+      </svg>
+
+    </div>
+
+    <div class="header-copy">
+
+      <h2>Risk Contribution Analysis</h2>
+
+      <p>
+        Understand the factors contributing
+        to the overall risk score.
+      </p>
+
+    </div>
+
+  </header>
+
+
+  <!-- Context summary -->
+
+  <div class="summary-grid">
+
+    <article class="summary-card">
+
+      <span>Predicted family</span>
+
+      <strong>
+        {{ prediction().predicted_family }}
+      </strong>
+
+    </article>
+
+    <article class="summary-card">
+
+      <span>Device context</span>
+
+      <strong>
+        {{ assessment().device_context.device_name }}
+      </strong>
+
+    </article>
+
+    <article class="summary-card">
+
+      <span>Overall risk score</span>
+
+      <strong>
+        {{ score() | number:'1.2-4' }} / 100
+      </strong>
+
+    </article>
+
+  </div>
+
+
+  <!-- Combined contribution visualization -->
+
+  <div class="combined-panel">
+
+    <h3>Combined risk contributions</h3>
+
+    <p>
+      Each segment represents its contribution
+      in risk points on the 0 to 100 scale.
+    </p>
+
+    <div
+      class="stacked-bar"
+      aria-hidden="true"
+    >
+
+      @for (item of contributions(); track item.key) {
+
+        <div
+          class="stacked-segment"
+          [style.width.%]="item.points"
+          [style.background]="item.color"
+        ></div>
+
+      }
+
+    </div>
+
+    <div class="axis-labels" aria-hidden="true">
+
+      <span>0</span>
+      <span>25</span>
+      <span>50</span>
+      <span>75</span>
+      <span>100</span>
+
+    </div>
+
+    <div class="legend">
+
+      @for (item of contributions(); track item.key) {
+
+        <div class="legend-item">
+
+          <span
+            class="legend-dot"
+            [style.background]="item.color"
+          ></span>
+
+          <span>{{ item.label }}</span>
+
+        </div>
+
+      }
+
+      <div class="legend-item">
+
+        <span class="legend-dot remaining"></span>
+
+        <span>
+          Remaining scale:
+          {{ unusedRiskCapacity() | number:'1.2-2' }}
+          pts
+        </span>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- Individual contribution cards -->
+
+  <div class="factor-grid">
+
+    @for (item of contributions(); track item.key) {
+
+      <article
+        class="factor-card"
+        [style.--factor-color]="item.color"
+      >
+
+        <div class="factor-header">
+
+          <div class="factor-title">
+
+            <span class="factor-dot"></span>
+
+            <h3>{{ item.label }}</h3>
+
+          </div>
+
+          <strong class="factor-points">
+
+            {{ item.points | number:'1.2-4' }}
+
+            <small>pts</small>
+
+          </strong>
+
+        </div>
+
+        <p class="factor-description">
+          {{ item.description }}
+        </p>
+
+        <div class="factor-track" aria-hidden="true">
+
+          <div
+            class="factor-fill"
+            [style.width.%]="item.points"
+          ></div>
+
+        </div>
+
+        <div class="factor-metrics">
+
+          <div>
+
+            <span>Factor value</span>
+
+            <strong>
+              {{ item.factor * 100 | number:'1.0-2' }}%
+            </strong>
+
+          </div>
+
+          <div>
+
+            <span>Policy weight</span>
+
+            <strong>
+              {{ item.weight * 100 | number:'1.0-2' }}%
+            </strong>
+
+          </div>
+
+          <div>
+
+            <span>Share of total risk</span>
+
+            <strong>
+              {{ item.share | number:'1.2-2' }}%
+            </strong>
+
+          </div>
+
+        </div>
+
+        <div class="formula">
+
+          <span>Contribution calculation</span>
+
+          <code>
+
+            100 &times;
+            {{ assessment().attack_probability | number:'1.4-8' }}
+            &times;
+            {{ item.weight | number:'1.2-2' }}
+            &times;
+            {{ item.factor | number:'1.2-6' }}
+
+          </code>
+
+          <strong>
+            = {{ item.points | number:'1.2-4' }} pts
+          </strong>
+
+        </div>
+
+      </article>
+
+    }
+
+  </div>
+
+
+  <!-- Risk interpretation -->
+
+  <div class="interpretation-panel">
+
+    <h3>Largest risk contribution</h3>
+
+    <strong>{{ dominantContribution() }}</strong>
+
+    <p>
+      This identifies the largest contribution
+      under the current risk policy. It does not
+      establish the cause of the attack.
+    </p>
+
+  </div>
+
+
+  <!-- Mathematical reconstruction -->
+
+  <div
+    class="reconstruction-panel"
+    [class.verified]="reconstructionVerified()"
+    [class.failed]="!reconstructionVerified()"
+  >
+
+    <h3>Risk score reconstruction</h3>
+
+    <div class="reconstruction-row">
+
+      <span>Sum of contributions</span>
+
+      <strong>
+        {{ contributionSum() | number:'1.4-6' }}
+      </strong>
+
+    </div>
+
+    <div class="reconstruction-row">
+
+      <span>Backend risk score</span>
+
+      <strong>
+        {{ score() | number:'1.4-6' }}
+      </strong>
+
+    </div>
+
+    <div class="reconstruction-row">
+
+      <span>Backend reconstruction error</span>
+
+      <strong>
+        {{ reconstruction().error.toExponential(3) }}
+      </strong>
+
+    </div>
+
+    @if (reconstructionVerified()) {
+
+      <div class="verification-message">
+
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9"/>
+          <path d="m8 12 3 3 5-6"/>
+        </svg>
+
+        <span>
+          Mathematical reconstruction verified
+        </span>
+
+      </div>
+
+    } @else {
+
+      <div class="verification-message" role="alert">
+
+        Risk score reconstruction is inconsistent.
+
+      </div>
+
+    }
+
+  </div>
+
+
+  <footer class="panel-footer">
+
+    Contributions explain the configured risk policy.
+    They are not SHAP feature attributions or
+    causal explanations of the detected attack.
+    Displayed calculations may contain rounding.
+
+  </footer>
+
+</section>

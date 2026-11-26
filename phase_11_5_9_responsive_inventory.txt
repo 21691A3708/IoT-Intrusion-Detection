@@ -1,0 +1,4635 @@
+﻿
+========================================
+FILE: frontend/src/styles.scss
+========================================
+/* Shared application foundation */
+html { color-scheme: dark; background: #080e19; }
+body { margin: 0; min-width: 320px; font-family: Inter, 'Segoe UI', sans-serif; color: #e2e8f0; }
+*, *::before, *::after { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
+img, canvas { max-width: 100%; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+
+========================================
+FILE: frontend/src/app/app.ts
+========================================
+import { Component } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
+import { GlobalLoader } from './shared/components/global-loader/global-loader';
+import { NotificationContainer } from './shared/components/notification-container/notification-container';
+
+@Component({
+  selector: 'app-root', standalone: true,
+  imports: [RouterOutlet, GlobalLoader, NotificationContainer],
+  templateUrl: './app.html', styleUrl: './app.scss',
+})
+export class App {}
+
+
+========================================
+FILE: frontend/src/app/app.html
+========================================
+<app-global-loader />
+<router-outlet />
+<app-notification-container />
+
+
+========================================
+FILE: frontend/src/app/app.scss
+========================================
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+
+========================================
+FILE: frontend/src/app/app.routes.ts
+========================================
+import { Routes, UrlMatcher } from '@angular/router';
+import { Dashboard } from './components/dashboard/dashboard';
+
+const pages = new Set(['dashboard', 'detection', 'traffic-monitor', 'incidents', 'response-center', 'devices', 'explainability', 'reports', 'assistant']);
+const pageMatcher: UrlMatcher = segments => segments.length === 1 && pages.has(segments[0].path)
+  ? { consumed: segments, posParams: { page: segments[0] } } : null;
+
+export const routes: Routes = [
+  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+  { path: 'alerts', redirectTo: 'incidents', pathMatch: 'full' },
+  { path: 'traffic', redirectTo: 'traffic-monitor', pathMatch: 'full' },
+  { path: 'analysis', redirectTo: 'explainability', pathMatch: 'full' },
+  { matcher: pageMatcher, component: Dashboard },
+  { path: '**', component: Dashboard },
+];
+
+
+========================================
+FILE: frontend/src/app/components/dashboard/dashboard.ts
+========================================
+import { Component, OnInit, inject, signal, DestroyRef } from '@angular/core';
+
+import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
+import { Title } from '@angular/platform-browser';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+
+import { Api, Device, DashboardAnalytics } from '../../services/api';
+
+import { PredictionWebSocket } from '../../services/prediction-websocket';
+
+import { BackendStatus } from '../backend-status/backend-status';
+import { Devices } from '../devices/devices';
+import { DeviceForm } from '../device-form/device-form';
+import { Detection } from '../detection/detection';
+import { PredictionHistory } from '../prediction-history/prediction-history';
+import { Explainability } from '../explainability/explainability';
+import { IncidentManagement } from '../incident-management/incident-management';
+import { CsvUpload } from '../csv-upload/csv-upload';
+import { PredictionTrends } from '../prediction-trends/prediction-trends';
+import { AssistantChat } from '../assistant-chat/assistant-chat';
+
+export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'analysis' | 'reports' | 'detection' | 'response-center' | 'assistant' | 'not-found';
+
+@Component({
+  selector: 'app-dashboard',
+  standalone: true,
+  imports: [
+    RouterLink,
+    RouterLinkActive,
+    BackendStatus,
+    Devices,
+    DeviceForm,
+    Detection,
+    PredictionHistory,
+    Explainability,
+    IncidentManagement,
+    CsvUpload,
+    PredictionTrends,
+    AssistantChat,
+  ],
+  templateUrl: './dashboard.html',
+  styleUrl: './dashboard.scss',
+})
+export class Dashboard implements OnInit {
+  private readonly api = inject(Api);
+  private readonly route = inject(ActivatedRoute);
+  private readonly browserTitle = inject(Title);
+  protected readonly menuOpen = signal(false);
+
+  private readonly predictionWebSocket = inject(PredictionWebSocket);
+
+  private readonly destroyRef = inject(DestroyRef);
+
+  // Application title
+  protected readonly title = signal('Network Intrusion Detection System');
+
+  // Current sidebar page
+  protected readonly activeView = signal<DashboardView>('dashboard');
+
+  // Shared WebSocket connection status
+  protected readonly websocketStatus = this.predictionWebSocket.status;
+
+  // Device data
+  protected readonly devices = signal<Device[]>([]);
+  protected readonly devicesLoading = signal(false);
+  protected readonly devicesError = signal('');
+
+  // Dashboard analytics
+  protected readonly analytics = signal<DashboardAnalytics | null>(null);
+  protected readonly analyticsLoading = signal(false);
+  protected readonly analyticsError = signal('');
+
+  // --------------------------------------------------
+  // INITIALIZATION
+  // --------------------------------------------------
+
+  ngOnInit(): void {
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
+      const views: Record<string, DashboardView> = {
+        dashboard: 'dashboard', incidents: 'alerts', devices: 'devices',
+        'traffic-monitor': 'traffic', explainability: 'analysis', reports: 'reports',
+        detection: 'detection', 'response-center': 'response-center', assistant: 'assistant',
+      };
+      const page = params.get('page') ?? '';
+      this.activeView.set(Object.prototype.hasOwnProperty.call(views, page) ? views[page] : 'not-found');
+      this.menuOpen.set(false);
+      this.browserTitle.setTitle(`${this.getPageTitle()} | IoT Sentinel`);
+    });
+    this.loadDevices();
+    this.loadAnalytics();
+    this.connectPredictionWebSocket();
+  }
+
+  // --------------------------------------------------
+  // SIDEBAR NAVIGATION
+  // --------------------------------------------------
+
+  protected getPageTitle(): string {
+    const titles: Record<DashboardView, string> = {
+      dashboard: 'Security Overview',
+      alerts: 'Security Alerts',
+      devices: 'IoT Device Management',
+      traffic: 'Traffic Monitoring',
+      analysis: 'Explainable AI Analysis',
+      reports: 'Reports and Batch Analysis',
+      detection: 'Intrusion Detection',
+      'response-center': 'Response Center',
+      assistant: 'AI Assistant',
+      'not-found': 'Page Not Found',
+    };
+
+    return titles[this.activeView()];
+  }
+
+  // --------------------------------------------------
+  // LOAD REGISTERED DEVICES
+  // --------------------------------------------------
+
+  protected loadDevices(showLoading = true): void {
+    if (showLoading) {
+      this.devicesLoading.set(true);
+    }
+
+    this.devicesError.set('');
+
+    this.api
+      .getDevices()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.devices.set(response);
+          this.devicesLoading.set(false);
+        },
+
+        error: (error) => {
+          console.error('Device loading failed:', error);
+
+          this.devicesError.set('Could not load devices. Check the backend and retry.');
+
+          this.devicesLoading.set(false);
+        },
+      });
+  }
+
+  // --------------------------------------------------
+  // LOAD DASHBOARD ANALYTICS
+  // --------------------------------------------------
+
+  protected loadAnalytics(showLoading = true): void {
+    if (showLoading) {
+      this.analyticsLoading.set(true);
+    }
+
+    this.analyticsError.set('');
+
+    this.api
+      .getDashboardAnalytics()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.analytics.set(response);
+          this.analyticsLoading.set(false);
+        },
+
+        error: (error) => {
+          console.error('Dashboard analytics loading failed:', error);
+
+          this.analyticsError.set(
+            'Could not load dashboard analytics. Check the backend and retry.',
+          );
+
+          this.analyticsLoading.set(false);
+        },
+      });
+  }
+
+  // --------------------------------------------------
+  // REAL-TIME WEBSOCKET CONNECTION
+  // --------------------------------------------------
+
+  private connectPredictionWebSocket(): void {
+    this.predictionWebSocket
+      .connect()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (event) => {
+          if (event.event === 'new_prediction') {
+            console.log('Real-time prediction received:', event.data);
+
+            // Refresh analytics when a new prediction arrives.
+            this.loadAnalytics(false);
+          }
+        },
+
+        error: (error) => {
+          console.error('Prediction WebSocket error:', error);
+        },
+
+        complete: () => {
+          console.log('Prediction WebSocket stream completed.');
+        },
+      });
+  }
+
+  // --------------------------------------------------
+  // MANUAL REFRESH
+  // --------------------------------------------------
+
+  protected refreshDashboard(): void {
+    this.loadDevices();
+    this.loadAnalytics();
+  }
+}
+
+
+========================================
+FILE: frontend/src/app/components/dashboard/dashboard.html
+========================================
+<div class="dashboard-layout">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon"><img src="favicon.svg" alt="" width="36" height="36"></div>
+      <div>
+        <h2>IoT Sentinel</h2>
+        <span>Security Center</span>
+      </div>
+    </div>
+
+    <button class="menu-toggle" type="button" (click)="menuOpen.set(!menuOpen())" [attr.aria-expanded]="menuOpen()" aria-controls="main-navigation">Menu</button>
+    <div class="sidebar-menu" [class.menu-open]="menuOpen()" id="main-navigation">
+      <span class="menu-heading">MAIN MENU</span>
+
+      <nav aria-label="Main navigation">
+        <a class="nav-link" routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-7 9 7v11H3z M9 21v-8h6v8"/></svg></span><span>Dashboard</span>
+        </a>
+        <a class="nav-link" routerLink="/detection" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)"><span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z M12 8v5 M12 16v1"/></svg></span><span>Intrusion Detection</span></a>
+        <a class="nav-link" routerLink="/incidents" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3L2 21h20z M12 9v5 M12 17v1"/></svg></span><span>Incidents</span>
+        </a>
+        <a class="nav-link" routerLink="/response-center" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)"><span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z M8 12l3 3 5-6"/></svg></span><span>Response Center</span></a>
+        <a class="nav-link" routerLink="/devices" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v13H3z M8 21h8 M12 17v4"/></svg></span><span>Devices</span>
+        </a>
+        <a class="nav-link" routerLink="/traffic-monitor" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg></span><span>Traffic Monitor</span>
+        </a>
+        <a class="nav-link" routerLink="/explainability" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l10 10-10 10L2 12z M12 7v10 M7 12h10"/></svg></span><span>Explainable AI</span>
+        </a>
+        <a class="nav-link" routerLink="/reports" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18H5z M8 8h8 M8 12h8 M8 16h8"/></svg></span><span>Reports</span>
+        </a>
+        <a class="nav-link" routerLink="/assistant" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)"><span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v12H9l-5 4z M8 10h8 M8 13h5"/></svg></span><span>AI Assistant</span></a>
+      </nav>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-status">
+        <span
+          class="sidebar-status-dot"
+          [class.status-online]="websocketStatus() === 'connected'"
+          [class.status-offline]="websocketStatus() === 'disconnected'"
+          [class.status-warning]="websocketStatus() === 'connecting' || websocketStatus() === 'reconnecting'"
+        ></span>
+        <div>
+          <strong>Legacy live connection</strong>
+          <small>{{ websocketStatus() }}</small>
+        </div>
+      </div>
+
+      <div class="sidebar-version">
+        IoT Intrusion Detection
+        <span>Security Platform</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="dashboard">
+    <header class="header">
+      <div class="header-title">
+        <div class="header-brand-icon"><img src="favicon.svg" alt="" width="36" height="36"></div>
+        <div>
+          <h1>{{ getPageTitle() }}</h1>
+          <p>IoT Security Operations Center</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="header-backend-status">
+          <app-backend-status />
+        </div>
+
+        <div
+          class="websocket-status"
+          [class.connected]="websocketStatus() === 'connected'"
+          [class.reconnecting]="websocketStatus() === 'reconnecting' || websocketStatus() === 'connecting'"
+          [class.disconnected]="websocketStatus() === 'disconnected'"
+        >
+          <span class="status-dot"></span>
+          <span>{{ websocketStatus() }}</span>
+        </div>
+
+        <button
+          type="button"
+          class="refresh-button"
+          (click)="refreshDashboard()"
+          [disabled]="analyticsLoading() || devicesLoading()"
+        >
+          {{ analyticsLoading() || devicesLoading() ? 'Refreshing...' : '↻ Refresh' }}
+        </button>
+      </div>
+    </header>
+
+    <div class="page-content" id="main-content">
+      @if (activeView() !== 'response-center' && activeView() !== 'not-found' && activeView() !== 'detection') {
+        <div class="migration-notice" role="note">Legacy integration: existing binary detection and related data remain in use until this module is migrated. Device inventory is not verified device context.</div>
+      }
+      @switch (activeView()) {
+        @case ('dashboard') {
+          <section class="analytics-section">
+            <div class="analytics-heading">
+              <div>
+                <h2>Security Overview</h2>
+                <p>Monitor IoT network security and intrusion detection activity</p>
+              </div>
+            </div>
+
+            @if (analyticsLoading()) {
+              <div class="analytics-message" role="status"><span class="inline-spinner" aria-hidden="true"></span> Loading security analytics…</div>
+            }
+
+            @if (analyticsError()) {
+              <div class="analytics-error">
+                {{ analyticsError() }}
+                <button type="button" (click)="loadAnalytics()">Retry</button>
+              </div>
+            }
+
+            @if (analytics(); as data) {
+              <div class="analytics-grid">
+                <div class="analytics-card total-card">
+                  <div class="card-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10 M12 20V4 M20 20v-7"/></svg></div>
+                  <div class="card-content">
+                    <span>Total Predictions</span>
+                    <strong>{{ data.totalPredictions }}</strong>
+                    <small>Analyzed traffic records</small>
+                  </div>
+                </div>
+
+                <div class="analytics-card normal-card">
+                  <div class="card-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg></div>
+                  <div class="card-content">
+                    <span>Normal Traffic</span>
+                    <strong>{{ data.normalPredictions }}</strong>
+                    <small>Predicted normal records</small>
+                  </div>
+                </div>
+
+                <div class="analytics-card attack-card">
+                  <div class="card-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3L2 21h20z M12 9v5 M12 17v1"/></svg></div>
+                  <div class="card-content">
+                    <span>Attack Traffic</span>
+                    <strong>{{ data.attackPredictions }}</strong>
+                    <small>Predicted attack records</small>
+                  </div>
+                </div>
+
+                <div class="analytics-card incident-card">
+                  <div class="card-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 18h14 M7 18v-7a5 5 0 0 1 10 0v7 M12 2v2 M3 6l2 2 M21 6l-2 2"/></svg></div>
+                  <div class="card-content">
+                    <span>Active Incidents</span>
+                    <strong>{{ data.activeIncidents }}</strong>
+                    <small>Unresolved incidents</small>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dashboard-charts-grid">
+                <div class="dashboard-panel trends-panel">
+                  <app-prediction-trends />
+                </div>
+
+                <div class="dashboard-panel risk-panel">
+                  <div class="panel-heading">
+                    <div>
+                      <h3>Risk Distribution</h3>
+                      <p>Prediction risk classification</p>
+                    </div>
+                  </div>
+
+                  <div class="risk-distribution-grid">
+                    <div class="risk-card low-risk">
+                      <span class="risk-label">Low Risk</span>
+                      <strong>{{ data.riskDistribution.low }}</strong>
+                    </div>
+                    <div class="risk-card medium-risk">
+                      <span class="risk-label">Medium Risk</span>
+                      <strong>{{ data.riskDistribution.medium }}</strong>
+                    </div>
+                    <div class="risk-card high-risk">
+                      <span class="risk-label">High Risk</span>
+                      <strong>{{ data.riskDistribution.high }}</strong>
+                    </div>
+                    <div class="risk-card critical-risk">
+                      <span class="risk-label">Critical Risk</span>
+                      <strong>{{ data.riskDistribution.critical }}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            }
+          </section>
+        }
+
+        @case ('alerts') {
+          <section class="dashboard-section"><app-prediction-history /></section>
+          <section class="dashboard-section"><app-incident-management /></section>
+        }
+
+        @case ('devices') {
+          <section class="dashboard-section">
+            <app-devices [devices]="devices()" [loading]="devicesLoading()" [error]="devicesError()" />
+          </section>
+          <section class="dashboard-section">
+            <app-device-form (deviceRegistered)="loadDevices()" />
+          </section>
+        }
+
+        @case ('traffic') {
+          <section class="dashboard-section"><app-prediction-trends /></section>
+        }
+
+        @case ('detection') {
+          <section class="dashboard-section"><app-detection /></section>
+        }
+        @case ('response-center') {
+          <section class="route-message"><h2>Controlled Response Center</h2><p>Frontend integration pending. No network actions can be executed here.</p></section>
+        }
+        @case ('assistant') {
+          <section class="route-message"><h2>AI Security Assistant</h2><p>Use the existing floating assistant button. Multiclass-aware assistance is pending.</p></section>
+        }
+        @case ('not-found') {
+          <section class="route-message"><h2>404 - Page not found</h2><p>This address does not match an application page.</p><a routerLink="/dashboard">Return to dashboard</a></section>
+        }
+        @case ('analysis') {
+          <section class="dashboard-section"><app-explainability /></section>
+        }
+
+        @case ('reports') {
+          <section class="dashboard-section"><app-csv-upload /></section>
+        }
+      }
+    </div>
+
+    <footer class="dashboard-footer">
+      <span>IoT Intrusion Detection System</span>
+      <span>Explainable AI | Risk-Aware Monitoring</span>
+    </footer>
+  </main>
+</div>
+
+<!-- Floating assistant is independent of the selected dashboard page. -->
+<app-assistant-chat />
+
+
+
+========================================
+FILE: frontend/src/app/components/dashboard/dashboard.scss
+========================================
+/* =========================================
+   NIDS - GLOBAL THEME
+========================================= */
+
+:host {
+  display: block;
+  min-height: 100vh;
+  color: #e2e8f0;
+  background: #080e19;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 235px minmax(0, 1fr);
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  background: #080e19;
+}
+
+/* =========================================
+   SIDEBAR
+========================================= */
+
+.sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  padding: 22px 15px 16px;
+  overflow-y: auto;
+  background: #0b1321;
+  border-right: 1px solid #1e2b3d;
+  z-index: 10;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 8px 25px;
+  border-bottom: 1px solid #1e2b3d;
+
+  .brand-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    color: white;
+    background: linear-gradient(135deg, #4f46e5, #2563eb);
+    border-radius: 11px;
+    font-size: 25px;
+  }
+
+  h2 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 19px;
+    letter-spacing: 1px;
+  }
+
+  span {
+    display: block;
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 10px;
+  }
+}
+
+.sidebar-menu {
+  margin-top: 27px;
+
+  .menu-heading {
+    display: block;
+    margin: 0 0 13px 10px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+  }
+
+  nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 11px;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  .nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    font-size: 17px;
+  }
+
+  &:hover {
+    color: #ffffff;
+    background: #152238;
+  }
+
+  &.active {
+    color: #ffffff;
+    background: linear-gradient(90deg, rgba(79, 70, 229, 0.3), rgba(59, 130, 246, 0.12));
+    border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
+  }
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  padding-top: 25px;
+}
+
+.sidebar-status {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 11px;
+  background: #101d2d;
+  border: 1px solid #24364a;
+  border-radius: 9px;
+
+  .sidebar-status-dot {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    background: #64748b;
+    border-radius: 50%;
+    transition:
+      background 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
+  strong {
+    display: block;
+    color: #dbeafe;
+    font-size: 11px;
+  }
+
+  small {
+    display: block;
+    margin-top: 4px;
+    color: #86a9c9;
+    font-size: 10px;
+    text-transform: capitalize;
+  }
+}
+
+.sidebar-status-dot.status-online {
+  background: #22c55e;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+}
+
+.sidebar-status-dot.status-warning {
+  background: #eab308;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.6);
+}
+
+.sidebar-status-dot.status-offline {
+  background: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+}
+
+.sidebar-version {
+  padding: 20px 5px 0;
+  color: #64748b;
+  font-size: 10px;
+  text-align: center;
+
+  span {
+    display: block;
+    margin-top: 5px;
+    color: #475569;
+    font-size: 9px;
+  }
+}
+
+/* =========================================
+   MAIN DASHBOARD
+========================================= */
+
+.dashboard-layout > .dashboard {
+  width: 100%;
+  height: 100vh;
+  min-width: 0;
+  min-height: 0;
+  padding: 25px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background:
+    radial-gradient(ellipse at top left, rgba(37, 99, 235, 0.08), transparent 35%), #080e19;
+}
+
+/* =========================================
+   UNIFIED TOP HEADER
+========================================= */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 28px;
+  padding: 17px 20px;
+  background: linear-gradient(145deg, #111c2d, #0d1726);
+  border: 1px solid #25344a;
+  border-radius: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+/* Keep the top header visible while dashboard content scrolls */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+  background: #101b2b;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid #2b3d55;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+
+  h1 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    line-height: 1.4;
+  }
+
+  p {
+    margin: 5px 0 0;
+    color: #8492a6;
+    font-size: 11px;
+  }
+}
+
+.header-brand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 43px;
+  height: 43px;
+  flex-shrink: 0;
+  color: #ffffff;
+  background: linear-gradient(135deg, #4f46e5, #2563eb);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 10px;
+  font-size: 25px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Backend status component wrapper */
+
+.header-backend-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 210px;
+
+  app-backend-status {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+}
+
+/* WebSocket status */
+
+.websocket-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: #cbd5e1;
+  background: #101d2d;
+  border: 1px solid #27364d;
+  border-radius: 8px;
+  font-size: 11px;
+  text-transform: capitalize;
+  white-space: nowrap;
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    background: #64748b;
+    border-radius: 50%;
+  }
+
+  &.connected {
+    border-color: rgba(34, 197, 94, 0.35);
+
+    .status-dot {
+      background: #22c55e;
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
+    }
+  }
+
+  &.reconnecting {
+    border-color: rgba(234, 179, 8, 0.35);
+
+    .status-dot {
+      background: #eab308;
+      box-shadow: 0 0 10px rgba(234, 179, 8, 0.5);
+    }
+  }
+
+  &.disconnected {
+    border-color: rgba(239, 68, 68, 0.35);
+
+    .status-dot {
+      background: #ef4444;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    }
+  }
+}
+
+.refresh-button {
+  padding: 10px 15px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(37, 99, 235, 0.3);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+/* =========================================
+   PAGE CONTENT
+========================================= */
+
+.page-content {
+  width: 100%;
+  min-width: 0;
+}
+
+.analytics-section {
+  display: flex;
+  flex-direction: column;
+  gap: 21px;
+  margin-top: 5px;
+}
+
+.analytics-heading {
+  h2 {
+    margin: 0 0 6px;
+    color: #f8fafc;
+    font-size: 21px;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0;
+    color: #8492a6;
+    font-size: 12px;
+  }
+}
+
+.dashboard-section {
+  width: 100%;
+  min-width: 0;
+  margin-top: 22px;
+}
+
+/* =========================================
+   KPI ANALYTICS CARDS
+========================================= */
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.analytics-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  min-height: 108px;
+  padding: 18px;
+  overflow: hidden;
+  background: linear-gradient(145deg, #111c2d, #0d1726);
+  border: 1px solid #25344a;
+  border-radius: 11px;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease;
+
+  &::after {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    content: '';
+    background: linear-gradient(90deg, #3b82f6, transparent);
+    opacity: 0.6;
+  }
+
+  &:hover {
+    transform: translateY(-3px);
+    border-color: #3b82f6;
+  }
+
+  .card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 43px;
+    height: 43px;
+    flex-shrink: 0;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 9px;
+    font-size: 20px;
+  }
+
+  .card-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  span {
+    color: #94a3b8;
+    font-size: 11px;
+  }
+
+  strong {
+    color: #f8fafc;
+    font-size: 25px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  small {
+    color: #64748b;
+    font-size: 10px;
+  }
+}
+
+.normal-card {
+  .card-icon {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.2);
+  }
+
+  strong {
+    color: #4ade80;
+  }
+}
+
+.attack-card {
+  .card-icon {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+  }
+
+  strong {
+    color: #f87171;
+  }
+}
+
+.incident-card {
+  .card-icon {
+    background: rgba(234, 179, 8, 0.1);
+    border-color: rgba(234, 179, 8, 0.2);
+  }
+
+  strong {
+    color: #fbbf24;
+  }
+}
+
+/* =========================================
+   CHARTS LAYOUT
+========================================= */
+
+.dashboard-charts-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 18px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.dashboard-panel {
+  min-width: 0;
+  padding: 20px;
+  background: linear-gradient(145deg, #111c2d, #0d1726);
+  border: 1px solid #25344a;
+  border-radius: 11px;
+}
+
+.trends-panel {
+  overflow: hidden;
+
+  app-prediction-trends {
+    display: block;
+    min-width: 0;
+  }
+}
+
+.panel-heading {
+  margin-bottom: 20px;
+
+  h3 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  p {
+    margin: 6px 0 0;
+    color: #8492a6;
+    font-size: 11px;
+  }
+}
+
+/* =========================================
+   RISK DISTRIBUTION
+========================================= */
+
+.risk-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.risk-distribution-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  flex: 1;
+}
+
+.risk-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 95px;
+  padding: 15px;
+  background: #0c1625;
+  border: 1px solid #26364c;
+  border-left-width: 3px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #142238;
+    transform: translateY(-2px);
+  }
+
+  .risk-label {
+    color: #94a3b8;
+    font-size: 11px;
+  }
+
+  strong {
+    color: #f8fafc;
+    font-size: 27px;
+  }
+}
+
+.low-risk {
+  border-left-color: #22c55e;
+}
+
+.medium-risk {
+  border-left-color: #eab308;
+}
+
+.high-risk {
+  border-left-color: #f97316;
+}
+
+.critical-risk {
+  border-left-color: #ef4444;
+}
+
+/* =========================================
+   LOADING AND ERROR MESSAGES
+========================================= */
+
+.analytics-message,
+.analytics-error {
+  padding: 16px;
+  color: #cbd5e1;
+  background: #111c2d;
+  border: 1px solid #293b54;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.analytics-error {
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+
+  button {
+    margin-left: 12px;
+    padding: 7px 12px;
+    color: #ffffff;
+    background: #27364d;
+    border: 1px solid #3b4d65;
+    border-radius: 6px;
+    cursor: pointer;
+
+    &:hover {
+      background: #354963;
+    }
+  }
+}
+
+/* =========================================
+   FOOTER
+========================================= */
+
+.dashboard-footer {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 35px;
+  padding: 18px 5px;
+  color: #64748b;
+  border-top: 1px solid #1e2b3d;
+  font-size: 10px;
+}
+
+/* =========================================
+   RESPONSIVE DESIGN
+========================================= */
+
+@media (max-width: 1250px) {
+  .dashboard-charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .risk-distribution-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .dashboard-layout {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+
+  .dashboard-layout > .dashboard {
+    padding: 20px;
+  }
+
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .analytics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .dashboard-layout {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    padding: 13px;
+    border-right: none;
+    border-bottom: 1px solid #1e2b3d;
+  }
+
+  .sidebar-brand {
+    padding-bottom: 13px;
+  }
+
+  .sidebar-menu {
+    margin-top: 15px;
+
+    .menu-heading {
+      margin-bottom: 9px;
+    }
+
+    nav {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+  }
+
+  .nav-link {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 9px;
+    font-size: 11px;
+  }
+
+  .sidebar-bottom {
+    padding-top: 13px;
+  }
+
+  .sidebar-version {
+    display: none;
+  }
+
+  .dashboard-layout > .dashboard {
+    height: auto;
+    min-height: 70vh;
+    padding: 16px;
+    overflow: visible;
+  }
+
+  .header {
+    padding: 15px;
+  }
+
+  .header-title h1 {
+    font-size: 18px;
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
+  }
+
+  .risk-distribution-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-footer {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics-grid,
+  .risk-distribution-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-card {
+    padding: 15px;
+  }
+
+  .dashboard-panel {
+    padding: 14px;
+  }
+
+  .header-title h1 {
+    font-size: 16px;
+  }
+
+  .header-brand-icon {
+    width: 37px;
+    height: 37px;
+    font-size: 21px;
+  }
+
+  .header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-backend-status {
+    max-width: 100%;
+  }
+
+  .websocket-status,
+  .refresh-button {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+/* Responsive shell refinement */
+.dashboard-charts-grid { align-items: start; }
+.risk-distribution-grid { flex: none; }
+.risk-card { min-height: 100px; }
+.sidebar-brand span, .sidebar-version, .analytics-card small, .panel-heading p { color: #9aadc4; font-size: 12px; }
+.nav-link { font-size: 14px; min-height: 44px; }
+.nav-icon { display: inline-flex; flex-shrink: 0; }
+.analytics-card span, .risk-card .risk-label { font-size: 13px; }
+.analytics-card strong { font-size: 30px; }
+.header-title h1 { font-size: clamp(18px, 2vw, 25px); }
+.header-title p, .analytics-heading p { font-size: 13px; }
+.menu-toggle { display: none; }
+.inline-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #34465e; border-top-color: #38bdf8; border-radius: 50%; vertical-align: middle; animation: inline-spin .8s linear infinite; }
+@keyframes inline-spin { to { transform: rotate(360deg); } }
+@media (max-width: 700px) {
+  .menu-toggle { display: block; margin-top: 12px; padding: 10px; background: #142238; color: #e2e8f0; border: 1px solid #34465e; border-radius: 8px; }
+  .sidebar-menu:not(.menu-open) { display: none; }
+  .sidebar-menu nav { flex-direction: column; }
+  .nav-link { width: 100%; }
+  .sidebar-bottom { display: none; }
+  .header-title { min-width: 0; }
+  .header-title h1 { overflow-wrap: anywhere; }
+}
+
+.nav-link { text-decoration: none; }
+.migration-notice, .route-message { padding: 16px; border: 1px solid #34465e; border-radius: 10px; background: #142033; color: #cbd5e1; overflow-wrap: anywhere; }
+.migration-notice { font-size: 13px; margin-bottom: 16px; }
+.route-message a { color: #7dd3fc; }
+.page-content { min-width: 0; }
+@media (max-width: 700px) { .sidebar-menu nav { gap: 4px; } .sidebar { height: auto; } .header-actions { min-width: 0; } }
+
+
+========================================
+FILE: frontend/src/app/components/backend-status/backend-status.ts
+========================================
+import {
+  Component,
+  OnInit,
+  DestroyRef,
+  inject,
+  signal,
+} from '@angular/core';
+
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { timeout } from 'rxjs';
+
+import { Api, HealthResponse } from '../../services/api';
+import { environment } from '../../../environments/environment';
+
+@Component({
+  selector: 'app-backend-status',
+  standalone: true,
+  templateUrl: './backend-status.html',
+  styleUrl: './backend-status.scss',
+})
+export class BackendStatus implements OnInit {
+
+  private readonly api = inject(Api);
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected readonly apiStatus = signal('Disconnected');
+
+  protected readonly health =
+    signal<HealthResponse | null>(null);
+
+  ngOnInit(): void {
+    this.checkHealth();
+  }
+
+  protected checkHealth(): void {
+
+    if (this.apiStatus() === 'Checking connection...') {
+      return;
+    }
+
+    this.apiStatus.set('Checking connection...');
+    this.health.set(null);
+
+    this.api.getHealth().pipe(
+      timeout(environment.requestTimeoutMs),
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe({
+
+      next: (response) => {
+        this.health.set(response);
+        this.apiStatus.set('Connected');
+      },
+
+      error: () => {
+        this.health.set(null);
+        this.apiStatus.set('Disconnected');
+      },
+
+    });
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/components/backend-status/backend-status.html
+========================================
+<div class="status-card">
+
+  <div class="backend-indicator">
+
+    <span
+      class="status-dot"
+      [class.connected]="apiStatus() === 'Connected'"
+      [class.disconnected]="apiStatus() === 'Disconnected'"
+      [class.checking]="apiStatus() === 'Checking connection...'"
+      aria-hidden="true"
+    ></span>
+
+    <div class="backend-info" aria-live="polite">
+      <span class="backend-label">Backend</span>
+      <strong>{{ apiStatus() }}</strong>
+    </div>
+
+  </div>
+
+  @if (health(); as info) {
+    <div class="backend-meta">
+      <span>{{ info.service }}</span>
+    </div>
+  }
+
+  <button
+    type="button"
+    class="check-button"
+    title="Check backend connection"
+    aria-label="Check backend connection"
+    (click)="checkHealth()"
+    [disabled]="apiStatus() === 'Checking connection...'"
+  >
+
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      style="vertical-align: middle;"
+    >
+      <path d="M20 7v5h-5"/>
+      <path d="M4 17v-5h5"/>
+      <path d="M6.1 7a7 7 0 0 1 11.8-1L20 12"/>
+      <path d="M4 12l2.1 6a7 7 0 0 0 11.8-1"/>
+    </svg>
+
+    Check
+
+  </button>
+
+</div>
+
+
+========================================
+FILE: frontend/src/app/components/backend-status/backend-status.scss
+========================================
+:host {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  margin: 0;
+  color: #e2e8f0;
+  background: #101d2d;
+  border: 1px solid #293b54;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.backend-indicator {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.status-dot.connected {
+  background: #22c55e;
+  box-shadow: 0 0 9px rgba(34, 197, 94, 0.7);
+}
+
+.status-dot.disconnected {
+  background: #ef4444;
+  box-shadow: 0 0 9px rgba(239, 68, 68, 0.6);
+}
+
+.status-dot.checking {
+  background: #eab308;
+}
+
+.backend-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+
+  .backend-label {
+    color: #94a3b8;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+  }
+
+  strong {
+    color: #4ade80;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+}
+
+.status-dot.disconnected ~ .backend-info strong {
+  color: #f87171;
+}
+
+.backend-meta {
+  min-width: 0;
+  overflow: hidden;
+
+  span {
+    display: block;
+    color: #8492a6;
+    font-size: 10px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+}
+
+.check-button {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  color: #dbeafe;
+  background: #1e40af;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+
+  &:hover:not(:disabled) {
+    background: #2563eb;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+@media (max-width: 480px) {
+  .backend-meta {
+    display: none;
+  }
+}
+
+
+========================================
+FILE: frontend/src/app/components/assistant-chat/assistant-chat.ts
+========================================
+import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: Date;
+}
+
+interface ChatResponse {
+  success: boolean;
+  intent: string;
+  answer: string;
+}
+
+@Component({
+  selector: 'app-assistant-chat',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  templateUrl: './assistant-chat.html',
+  styleUrl: './assistant-chat.scss',
+})
+export class AssistantChat {
+  private readonly http = inject(HttpClient);
+  private readonly destroyRef = inject(DestroyRef);
+
+  private readonly apiUrl = 'http://127.0.0.1:8000/api/assistant/chat';
+
+  protected readonly isOpen = signal(false);
+  protected readonly isSending = signal(false);
+  protected readonly errorMessage = signal('');
+
+  protected readonly messages = signal<ChatMessage[]>([
+    {
+      role: 'assistant',
+      text:
+        "Hello! I'm your IoT Security Assistant. Ask me about network attacks, " +
+        'risk levels, SHAP explanations, predictions, incidents, or registered devices.',
+      timestamp: new Date(),
+    },
+  ]);
+
+  protected question = '';
+
+  protected toggleChat(): void {
+    this.isOpen.update((open) => !open);
+    this.errorMessage.set('');
+  }
+
+  protected closeChat(): void {
+    this.isOpen.set(false);
+    this.errorMessage.set('');
+  }
+
+  protected sendQuestion(): void {
+    const question = this.question.trim();
+
+    if (!question || this.isSending()) {
+      return;
+    }
+
+    this.messages.update((current) => [
+      ...current,
+      { role: 'user', text: question, timestamp: new Date() },
+    ]);
+
+    this.question = '';
+    this.isSending.set(true);
+    this.errorMessage.set('');
+
+    this.http
+      .post<ChatResponse>(this.apiUrl, { question })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.messages.update((current) => [
+            ...current,
+            {
+              role: 'assistant',
+              text:
+                response?.answer ||
+                'The assistant returned an empty response. Please try again.',
+              timestamp: new Date(),
+            },
+          ]);
+          this.isSending.set(false);
+        },
+        error: (error) => {
+          console.error('Assistant chat request failed:', error);
+
+          this.errorMessage.set(
+            'Could not connect to the assistant. Make sure the FastAPI backend is running.',
+          );
+          this.messages.update((current) => [
+            ...current,
+            {
+              role: 'assistant',
+              text:
+                'I could not reach the backend. Please check that the FastAPI server is running and try again.',
+              timestamp: new Date(),
+            },
+          ]);
+          this.isSending.set(false);
+        },
+      });
+  }
+
+  protected onEnter(event: Event): void {
+    const keyboardEvent = event as KeyboardEvent;
+
+    if (!keyboardEvent.shiftKey) {
+      keyboardEvent.preventDefault();
+      this.sendQuestion();
+    }
+  }
+
+  protected trackMessage(index: number, message: ChatMessage): string {
+    return `${message.role}-${message.timestamp.getTime()}-${index}`;
+  }
+}
+
+
+========================================
+FILE: frontend/src/app/components/assistant-chat/assistant-chat.html
+========================================
+<div class="assistant-widget">
+  @if (isOpen()) {
+    <section
+      class="chat-window"
+      role="dialog"
+      aria-label="IoT Security Assistant"
+      aria-modal="false"
+    >
+      <header class="chat-header">
+        <div class="assistant-avatar" aria-hidden="true">
+          <span>â¬¡</span>
+        </div>
+
+        <div class="chat-heading">
+          <h2>IoT Security Assistant</h2>
+          <span class="connection-label">
+            <span class="connection-dot"></span>
+            Local project assistant
+          </span>
+        </div>
+
+        <button
+          type="button"
+          class="header-action"
+          aria-label="Minimize chat"
+          title="Minimize"
+          (click)="closeChat()"
+        >
+          âˆ’
+        </button>
+      </header>
+
+      <div class="chat-intro">
+        Answers use the project's security knowledge base and live database queries.
+      </div>
+
+      <div class="message-list" aria-live="polite" aria-relevant="additions">
+        @for (message of messages(); track trackMessage($index, message)) {
+          <div
+            class="message-row"
+            [class.user-row]="message.role === 'user'"
+            [class.assistant-row]="message.role === 'assistant'"
+          >
+            @if (message.role === 'assistant') {
+              <div class="message-avatar" aria-hidden="true">â¬¡</div>
+            }
+
+            <div class="message-content">
+              <div class="message-bubble" [class.user-bubble]="message.role === 'user'">
+                {{ message.text }}
+              </div>
+              <time class="message-time">{{ message.timestamp | date: 'shortTime' }}</time>
+            </div>
+          </div>
+        }
+
+        @if (isSending()) {
+          <div class="message-row assistant-row">
+            <div class="message-avatar" aria-hidden="true">â¬¡</div>
+            <div class="message-content">
+              <div class="typing-indicator" aria-label="Assistant is responding">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (errorMessage()) {
+        <div class="chat-error" role="alert">{{ errorMessage() }}</div>
+      }
+
+      <form class="chat-composer" (ngSubmit)="sendQuestion()">
+        <textarea
+          name="question"
+          [(ngModel)]="question"
+          placeholder="Ask about your IoT security..."
+          rows="1"
+          maxlength="2000"
+          [disabled]="isSending()"
+          (keydown.enter)="onEnter($event)"
+          aria-label="Type your question"
+        ></textarea>
+
+        <button
+          type="submit"
+          class="send-button"
+          [disabled]="!question.trim() || isSending()"
+          aria-label="Send message"
+          title="Send message"
+        >
+          âž¤
+        </button>
+      </form>
+
+      <div class="chat-footer">IoT Intrusion Detection Â· Security Assistant</div>
+    </section>
+  }
+
+  <button
+    type="button"
+    class="chat-launcher"
+    [class.launcher-open]="isOpen()"
+    [attr.aria-expanded]="isOpen()"
+    aria-label="Open IoT Security Assistant"
+    title="Chat with IoT Security Assistant"
+    (click)="toggleChat()"
+  >
+    @if (isOpen()) {
+      <span class="launcher-close">Ã—</span>
+    } @else {
+      <span class="launcher-icon">â–¤</span>
+      <span class="launcher-pulse"></span>
+    }
+  </button>
+</div>
+
+
+========================================
+FILE: frontend/src/app/components/assistant-chat/assistant-chat.scss
+========================================
+.assistant-widget {
+  --chat-bg: #0f172a;
+  --chat-panel: #111c30;
+  --chat-border: #29384f;
+  --chat-text: #e2e8f0;
+  --chat-muted: #94a3b8;
+  --chat-accent: #0891b2;
+  --chat-accent-light: #22d3ee;
+
+  position: fixed;
+  right: 28px;
+  bottom: 26px;
+  z-index: 1000;
+  color: var(--chat-text);
+  font-family: inherit;
+}
+
+.chat-launcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-left: auto;
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0891b2, #2563eb);
+  color: #fff;
+  box-shadow: 0 10px 30px rgba(2, 132, 199, 0.35);
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 34px rgba(2, 132, 199, 0.45);
+  }
+
+  &:focus-visible {
+    outline: 3px solid #67e8f9;
+    outline-offset: 4px;
+  }
+}
+
+.launcher-icon {
+  font-size: 27px;
+  line-height: 1;
+}
+
+.launcher-close {
+  font-size: 34px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.launcher-pulse {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #0f172a;
+  border-radius: 50%;
+  background: #4ade80;
+}
+
+.chat-window {
+  display: flex;
+  flex-direction: column;
+  width: min(390px, calc(100vw - 36px));
+  height: min(570px, calc(100dvh - 120px));
+  margin-bottom: 15px;
+  overflow: hidden;
+  border: 1px solid var(--chat-border);
+  border-radius: 18px;
+  background: var(--chat-bg);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 70px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--chat-border);
+  background: #142238;
+}
+
+.assistant-avatar,
+.message-avatar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: rgba(8, 145, 178, 0.18);
+  color: #67e8f9;
+  font-size: 22px;
+}
+
+.assistant-avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.chat-heading {
+  flex: 1;
+  min-width: 0;
+
+  h2 {
+    margin: 0 0 5px;
+    color: #f8fafc;
+    font-size: 14px;
+    font-weight: 700;
+  }
+}
+
+.connection-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.connection-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+}
+
+.header-action {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #34445b;
+  border-radius: 8px;
+  background: transparent;
+  color: #cbd5e1;
+  font-size: 22px;
+  cursor: pointer;
+
+  &:hover {
+    background: #26364c;
+  }
+}
+
+.chat-intro {
+  padding: 10px 15px;
+  border-bottom: 1px solid rgba(41, 56, 79, 0.7);
+  color: var(--chat-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.message-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 17px;
+  padding: 17px 13px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.message-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.user-row {
+  justify-content: flex-end;
+}
+
+.assistant-row {
+  justify-content: flex-start;
+}
+
+.message-avatar {
+  width: 27px;
+  height: 27px;
+  border-radius: 9px;
+  font-size: 15px;
+}
+
+.message-content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 84%;
+  min-width: 0;
+}
+
+.user-row .message-content {
+  align-items: flex-end;
+}
+
+.message-bubble {
+  padding: 10px 12px;
+  border: 1px solid #29384f;
+  border-radius: 13px 13px 13px 4px;
+  background: #1b293d;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.user-bubble {
+  border-color: #075985;
+  border-radius: 13px 13px 4px 13px;
+  background: #075985;
+  color: #f0f9ff;
+}
+
+.message-time {
+  padding: 0 3px;
+  color: #64748b;
+  font-size: 10px;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  width: fit-content;
+  padding: 13px;
+  border: 1px solid #29384f;
+  border-radius: 12px;
+  background: #1b293d;
+
+  span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #67e8f9;
+    animation: typing 1s infinite ease-in-out;
+  }
+
+  span:nth-child(2) {
+    animation-delay: 150ms;
+  }
+
+  span:nth-child(3) {
+    animation-delay: 300ms;
+  }
+}
+
+@keyframes typing {
+  0%, 60%, 100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
+.chat-error {
+  margin: 0 13px 9px;
+  padding: 9px 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fca5a5;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.chat-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+  margin: 0 12px;
+  padding: 9px;
+  border: 1px solid #34445b;
+  border-radius: 12px;
+  background: #172438;
+
+  textarea {
+    flex: 1;
+    min-width: 0;
+    max-height: 100px;
+    padding: 7px 3px;
+    border: 0;
+    outline: 0;
+    resize: none;
+    background: transparent;
+    color: #f8fafc;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+
+    &::placeholder {
+      color: #718096;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+    }
+  }
+}
+
+.send-button {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: #0891b2;
+  color: #fff;
+  font-size: 17px;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: #0e7490;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.chat-footer {
+  padding: 9px 12px 11px;
+  color: #64748b;
+  font-size: 10px;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .assistant-widget {
+    right: 15px;
+    bottom: 15px;
+  }
+
+  .chat-window {
+    width: calc(100vw - 30px);
+    height: min(560px, calc(100dvh - 105px));
+  }
+
+  .chat-launcher {
+    width: 54px;
+    height: 54px;
+  }
+}
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.html
+========================================
+<div class="detection-page">
+
+  <section class="detection-heading">
+
+    <div class="heading-icon">
+      <svg viewBox="0 0 24 24" width="28" height="28"
+           fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z"/>
+        <path d="M12 8v5m0 4h.01"/>
+      </svg>
+    </div>
+
+    <div>
+      <h2>Multiclass Intrusion Detection</h2>
+      <p>
+        Analyze network traffic using the calibrated
+        multiclass Random Forest model.
+      </p>
+    </div>
+
+  </section>
+
+  @if (modelLoading()) {
+
+    <div class="panel loading-panel" role="status">
+      <span class="spinner"></span>
+      Loading model information...
+    </div>
+
+  }
+
+  @if (modelError()) {
+
+    <div class="error-panel" role="alert">
+      <p>{{ modelError() }}</p>
+
+      <button type="button" class="secondary-button"
+              (click)="loadModelInfo()">
+        Retry
+      </button>
+    </div>
+
+  }
+
+  @if (modelInfo(); as model) {
+
+    <section class="model-grid">
+
+      <div class="metric-card">
+        <span>Classification classes</span>
+        <strong>{{ model.class_count }}</strong>
+      </div>
+
+      <div class="metric-card">
+        <span>Required features</span>
+        <strong>{{ model.feature_count }}</strong>
+      </div>
+
+      <div class="metric-card">
+        <span>High-confidence threshold</span>
+        <strong>
+          {{ model.high_confidence_threshold * 100 | number:'1.0-1' }}%
+        </strong>
+      </div>
+
+      <div class="metric-card">
+        <span>Probability calibration</span>
+        <strong class="green">
+          {{ model.calibrated ? 'Enabled' : 'Disabled' }}
+        </strong>
+      </div>
+
+    </section>
+
+    <section class="panel model-panel">
+
+      <h3>Model Information</h3>
+
+      <div class="metadata-grid">
+
+        <div>
+          <span>Algorithm</span>
+          <strong>{{ model.algorithm }}</strong>
+        </div>
+
+        <div>
+          <span>Model version</span>
+          <strong>{{ model.model_version }}</strong>
+        </div>
+
+        <div>
+          <span>Configuration</span>
+          <strong>{{ model.configuration }}</strong>
+        </div>
+
+        <div>
+          <span>Validation-supported classes</span>
+          <strong>
+            {{ model.validation_supported_labels.length }}
+            / {{ model.class_count }}
+          </strong>
+        </div>
+
+      </div>
+
+      <div class="family-list">
+        @for (family of families; track family) {
+          <span class="family-chip">{{ family }}</span>
+        }
+      </div>
+
+    </section>
+
+  }
+
+  <app-device-context-selector
+    [disabled]="submitting()">
+  </app-device-context-selector>
+
+  <div class="workspace">
+
+    <section class="panel input-panel">
+
+      <div class="panel-heading">
+        <h3>Network Traffic Input</h3>
+        <span class="mode-chip">Prediction only</span>
+      </div>
+
+      <p class="muted">
+        Enter a JSON object containing all 36 numerical
+        network traffic features.
+      </p>
+
+      <div class="button-row">
+
+        <button type="button" class="secondary-button"
+                (click)="loadTemplate()"
+                [disabled]="!modelInfo() || submitting()">
+          Load Feature Template
+        </button>
+
+        <button type="button" class="secondary-button"
+                (click)="clearInput()"
+                [disabled]="submitting()">
+          Clear
+        </button>
+
+      </div>
+
+      <label for="traffic-json">Traffic features (JSON)</label>
+
+      <textarea
+        id="traffic-json"
+        [ngModel]="trafficJson"
+        (ngModelChange)="onInputChange($event)"
+        [disabled]="submitting()"
+        placeholder="Paste network traffic features here..."
+        spellcheck="false"
+      ></textarea>
+
+      @if (errorMessage()) {
+        <div class="error-panel" role="alert">
+          {{ errorMessage() }}
+        </div>
+      }
+
+      <button
+        type="button"
+        class="primary-button"
+        (click)="detectTraffic()"
+        [disabled]="submitting() || !modelInfo() ||
+                    !trafficJson.trim()"
+      >
+
+        @if (submitting()) {
+          <span class="spinner"></span>
+          Analyzing Traffic...
+        } @else {
+          <svg viewBox="0 0 24 24" width="18" height="18"
+               fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round"
+               aria-hidden="true">
+            <circle cx="10" cy="10" r="6"/>
+            <path d="m15 15 6 6"/>
+          </svg>
+          Analyze Traffic
+        }
+
+      </button>
+
+      <p class="muted small">
+        This operation does not save a prediction,
+        create an incident or execute a response.
+      </p>
+
+    </section>
+
+    <section class="panel result-panel"
+             [attr.aria-busy]="submitting()">
+
+      <h3>Prediction Results</h3>
+
+      @if (submitting()) {
+
+        <div class="empty-state" role="status">
+          <span class="spinner large"></span>
+          <strong>Analyzing network traffic</strong>
+          <p>Waiting for the multiclass model.</p>
+        </div>
+
+      } @else if (result(); as prediction) {
+
+        <div class="prediction-banner"
+             [class.benign]="prediction.predicted_family === 'Benign'">
+
+          <span>Predicted family</span>
+
+          <strong>{{ prediction.predicted_family }}</strong>
+
+          <span>
+            {{ statusLabels[prediction.detection_status] }}
+          </span>
+
+        </div>
+
+        @if (unsupportedClass()) {
+
+          <div class="warning-panel" role="status">
+            This class was not represented in the validation
+            split. Its predictive reliability has not been
+            established by that validation experiment.
+          </div>
+
+        }
+
+        <div class="result-metrics">
+
+          <div class="metric-card">
+            <span>Model confidence</span>
+            <strong>
+              {{ prediction.prediction_confidence * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Calibrated attack probability</span>
+            <strong>
+              {{ prediction.calibrated_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Raw attack probability</span>
+            <strong>
+              {{ prediction.raw_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Benign class probability</span>
+            <strong>
+              {{ prediction.benign_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+        </div>
+
+        <h4>Class Probability Distribution</h4>
+
+        <div class="probability-list">
+
+          @for (item of probabilityRows(); track item.family) {
+
+            <div class="probability-row">
+
+              <span class="probability-label">
+                {{ item.family }}
+              </span>
+
+              <div class="probability-track"
+                   role="meter"
+                   [attr.aria-label]="item.family + ' probability'"
+                   aria-valuemin="0"
+                   aria-valuemax="100"
+                   [attr.aria-valuenow]="item.probability * 100">
+
+                <div
+                  class="probability-fill"
+                  [class.predicted]="item.predicted"
+                  [class.normal]="item.family === 'Benign'"
+                  [style.width.%]="item.probability * 100">
+                </div>
+
+              </div>
+
+              <strong>
+                {{ item.probability * 100 | number:'1.2-2' }}%
+              </strong>
+
+            </div>
+
+          }
+
+        </div>
+
+        <div class="information-panel">
+
+          <strong>Probability interpretation</strong>
+
+          <p>
+            Individual family probabilities are uncalibrated.
+            Calibration applies only to the overall attack
+            versus benign probability.
+          </p>
+
+          @if (!prediction.calibration_independently_validated) {
+            <p>
+              Calibration has not yet been independently
+              evaluated on the held-out test set.
+            </p>
+          }
+
+        </div>
+
+        <div class="metadata-grid">
+
+          <div>
+            <span>Incident created</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Response executed</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Context-aware risk</span>
+            <strong>Not assessed</strong>
+          </div>
+
+          <div>
+            <span>Model version</span>
+            <strong>{{ prediction.model_version }}</strong>
+          </div>
+
+        </div>
+
+      } @else {
+
+        <div class="empty-state">
+
+          <svg viewBox="0 0 24 24" width="52" height="52"
+               fill="none" stroke="currentColor"
+               stroke-width="1.3" stroke-linecap="round"
+               aria-hidden="true">
+            <path d="M3 3v18h18M7 16v-4m5 4V7m5 9v-6"/>
+          </svg>
+
+          <strong>No prediction available</strong>
+
+          <p>
+            Enter valid network traffic features and
+            select Analyze Traffic.
+          </p>
+
+        </div>
+
+      }
+
+    </section>
+
+  </div>
+
+</div>
+
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.scss
+========================================
+:host {
+  display: block;
+  min-width: 0;
+  color: #e2e8f0;
+}
+
+.detection-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.detection-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.heading-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, .1);
+}
+
+h2, h3, h4 {
+  margin: 0;
+  color: #f1f5f9;
+}
+
+h2 { font-size: 23px; }
+h3 { font-size: 17px; }
+h4 { font-size: 14px; }
+
+p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.muted, .detection-heading p {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.small { font-size: 12px; }
+
+.model-grid,
+.metadata-grid,
+.result-metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.model-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.panel, .metric-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #29384d;
+  border-radius: 14px;
+  background: #142033;
+}
+
+.metric-card {
+  display: grid;
+  gap: 9px;
+}
+
+.metric-card span,
+.metadata-grid span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.metric-card strong {
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+
+.green { color: #4ade80; }
+
+.metadata-grid {
+  margin-top: 16px;
+}
+
+.metadata-grid > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metadata-grid strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.family-list, .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.family-chip, .mode-chip {
+  border: 1px solid #304158;
+  border-radius: 20px;
+  padding: 6px 10px;
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+label {
+  display: block;
+  margin: 16px 0 8px;
+  font-size: 13px;
+}
+
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 380px;
+  padding: 14px;
+  resize: vertical;
+  border: 1px solid #34445c;
+  border-radius: 10px;
+  background: #0b1220;
+  color: #bfdbfe;
+  font: 13px/1.7 Consolas, monospace;
+}
+
+textarea:focus-visible, button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 10px 15px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.primary-button {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.secondary-button {
+  border: 1px solid #34445c;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.result-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.prediction-banner {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #7f3945;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, .08);
+  color: #fca5a5;
+}
+
+.prediction-banner.benign {
+  border-color: #276749;
+  background: rgba(34, 197, 94, .08);
+  color: #86efac;
+}
+
+.prediction-banner strong {
+  font-size: 30px;
+  overflow-wrap: anywhere;
+}
+
+.result-metrics .metric-card {
+  background: #0b1220;
+  padding: 12px;
+}
+
+.result-metrics strong { font-size: 20px; }
+
+.probability-list {
+  display: grid;
+  gap: 12px;
+}
+
+.probability-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.probability-row strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.probability-track {
+  height: 8px;
+  border-radius: 8px;
+  background: #29384d;
+  overflow: hidden;
+}
+
+.probability-fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: inherit;
+}
+
+.probability-fill.predicted { background: #ef4444; }
+.probability-fill.normal { background: #22c55e; }
+
+.empty-state {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.error-panel,
+.warning-panel,
+.information-panel {
+  padding: 13px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.error-panel {
+  background: #3b202b;
+  color: #fca5a5;
+}
+
+.warning-panel {
+  background: #382e1c;
+  color: #fcd34d;
+}
+
+.information-panel {
+  background: #142c43;
+  color: #bfdbfe;
+}
+
+.loading-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  border: 2px solid #64748b;
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+.spinner.large {
+  width: 42px;
+  height: 42px;
+  border-width: 3px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1200px) {
+  .model-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .detection-page { gap: 14px; }
+  .panel { padding: 14px; }
+  .metric-card { padding: 12px; }
+  h2 { font-size: 18px; }
+  textarea { min-height: 300px; }
+  .metadata-grid { grid-template-columns: minmax(0, 1fr); }
+  .probability-row {
+    grid-template-columns: 95px minmax(0, 1fr) 55px;
+    gap: 5px;
+  }
+  .metric-card strong { font-size: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+
+========================================
+FILE: frontend/src/app/components/devices/devices.html
+========================================
+<section class="devices-section">
+
+  <header class="section-header">
+    <div>
+      <h2>Device Inventory</h2>
+      <p>Registered IoT devices and security context profiles.</p>
+    </div>
+  </header>
+
+  <div class="summary-grid">
+
+    <article class="summary-card">
+      <span>Registered Devices</span>
+      <strong>{{ devices().length }}</strong>
+      <small>Database inventory</small>
+    </article>
+
+    <article class="summary-card">
+      <span>Reported Online</span>
+      <strong class="green">{{ onlineCount() }}</strong>
+      <small>Stored status, not live verification</small>
+    </article>
+
+    <article class="summary-card">
+      <span>Security Context Profiles</span>
+      <strong>{{ context.totalProfiles() }}</strong>
+      <small>Demonstration inventory</small>
+    </article>
+
+  </div>
+
+  <section class="panel">
+
+    <div class="section-header">
+      <div>
+        <h3>Registered Devices</h3>
+        <p>Search and filter your device inventory.</p>
+      </div>
+      <span class="chip">
+        {{ filteredDevices().length }} / {{ devices().length }}
+      </span>
+    </div>
+
+    <div class="filter-bar">
+
+      <input
+        type="search"
+        aria-label="Search devices"
+        placeholder="Search name, identifier, type or location..."
+        [ngModel]="search()"
+        (ngModelChange)="search.set($event)"
+      />
+
+      <select
+        aria-label="Filter by device status"
+        [ngModel]="statusFilter()"
+        (ngModelChange)="statusFilter.set($event)"
+      >
+        <option value="all">All statuses</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+        <option value="unknown">Unknown</option>
+        <option value="quarantined">Quarantined</option>
+      </select>
+
+      <button type="button" (click)="resetFilters()">
+        Reset
+      </button>
+
+    </div>
+
+    @if (loading()) {
+
+      <div class="message" role="status">
+        Loading registered devices...
+      </div>
+
+    } @else if (error()) {
+
+      <div class="message error" role="alert">
+        {{ error() }}
+      </div>
+
+    } @else if (!filteredDevices().length) {
+
+      <div class="message">
+        No devices match your search.
+      </div>
+
+    } @else {
+
+      <div class="table-wrapper">
+
+        <table>
+
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>Identifier</th>
+              <th>Type</th>
+              <th>Location</th>
+              <th>Reported Status</th>
+              <th>Registered On</th>
+            </tr>
+          </thead>
+
+          <tbody>
+
+            @for (device of filteredDevices(); track device.id) {
+
+              <tr>
+
+                <td>
+                  <div class="device-name">
+                    <svg viewBox="0 0 24 24" width="20" height="20"
+                         fill="none" stroke="currentColor"
+                         stroke-width="1.6" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="14" rx="2"/>
+                      <path d="M8 21h8m-4-4v4"/>
+                    </svg>
+                    <strong>{{ device.device_name }}</strong>
+                  </div>
+                </td>
+
+                <td class="identifier">
+                  {{ device.device_identifier }}
+                </td>
+
+                <td>{{ device.device_type }}</td>
+
+                <td>{{ device.location || 'Not specified' }}</td>
+
+                <td>
+                  <span class="status-chip"
+                        [class.online]="device.status === 'online'"
+                        [class.offline]="device.status === 'offline'"
+                        [class.quarantined]="device.status === 'quarantined'">
+                    {{ device.status }}
+                  </span>
+                </td>
+
+                <td>
+                  {{ device.created_at | date:'medium' }}
+                </td>
+
+              </tr>
+
+            }
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    }
+
+  </section>
+
+  <section class="panel">
+
+    <div class="section-header">
+
+      <div>
+        <h3>Device Security Context Profiles</h3>
+        <p>Predefined profiles for context-aware risk assessment.</p>
+      </div>
+
+      <button type="button"
+              (click)="context.loadProfiles(true)"
+              [disabled]="context.loading()">
+        Refresh Profiles
+      </button>
+
+    </div>
+
+    <div class="notice">
+      These profiles are demonstration configurations,
+      separate from the registered device inventory.
+      No physical device identity has been verified.
+    </div>
+
+    @if (context.loading()) {
+
+      <div class="message" role="status">
+        Loading security profiles...
+      </div>
+
+    } @else if (context.error()) {
+
+      <div class="message error" role="alert">
+        {{ context.error() }}
+      </div>
+
+    } @else {
+
+      <div class="profile-grid">
+
+        @for (profile of context.profiles(); track profile.device_id) {
+
+          <article class="profile-card"
+                   [class.selected]="context.selectedDeviceId() === profile.device_id">
+
+            <div class="profile-heading">
+
+              <div class="profile-icon">
+                <svg viewBox="0 0 24 24" width="24" height="24"
+                     fill="none" stroke="currentColor"
+                     stroke-width="1.6" aria-hidden="true">
+                  <path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z"/>
+                  <path d="M9 12l2 2 4-4"/>
+                </svg>
+              </div>
+
+              <div>
+                <h4>{{ profile.device_name }}</h4>
+                <small>{{ profile.device_id }}</small>
+              </div>
+
+            </div>
+
+            <p>{{ profile.business_function }}</p>
+
+            <div class="metric-heading">
+              <span>Device Criticality</span>
+              <strong>
+                {{ profile.criticality * 100 | number:'1.0-1' }}%
+              </strong>
+            </div>
+
+            <div class="meter"
+                 role="meter"
+                 aria-label="Device criticality"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 [attr.aria-valuenow]="profile.criticality * 100">
+
+              <div class="criticality-fill"
+                   [class.high]="profile.criticality >= 0.9"
+                   [style.width.%]="profile.criticality * 100">
+              </div>
+
+            </div>
+
+            <div class="metric-heading">
+              <span>Network Exposure</span>
+              <strong>
+                {{ profile.exposure * 100 | number:'1.0-1' }}%
+              </strong>
+            </div>
+
+            <div class="meter"
+                 role="meter"
+                 aria-label="Network exposure"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 [attr.aria-valuenow]="profile.exposure * 100">
+
+              <div class="exposure-fill"
+                   [style.width.%]="profile.exposure * 100">
+              </div>
+
+            </div>
+
+            <div class="policy">
+
+              <span class="chip">
+                Identity unverified
+              </span>
+
+              <span class="chip"
+                    [class.restricted]="!profile.containment_allowed">
+                {{ profile.containment_allowed
+                    ? 'Consideration permitted'
+                    : 'Containment restricted' }}
+              </span>
+
+            </div>
+
+            <small>
+              Simulation only. Containment not authorized.
+            </small>
+
+            <button type="button"
+                    class="select-button"
+                    [attr.aria-pressed]="context.selectedDeviceId() === profile.device_id"
+                    (click)="context.selectDevice(profile.device_id)">
+
+              {{ context.selectedDeviceId() === profile.device_id
+                  ? 'Selected Context'
+                  : 'Select Context' }}
+
+            </button>
+
+          </article>
+
+        }
+
+      </div>
+
+      @if (context.selectedProfile(); as selected) {
+
+        <div class="selection-summary" role="status">
+
+          <div>
+            <strong>Selected context: {{ selected.device_name }}</strong>
+            <p>{{ selected.device_id }} - Ready for risk assessment integration.</p>
+          </div>
+
+          <button type="button"
+                  (click)="context.clearSelection()">
+            Clear Selection
+          </button>
+
+        </div>
+
+      }
+
+    }
+
+  </section>
+
+</section>
+
+
+========================================
+FILE: frontend/src/app/components/devices/devices.scss
+========================================
+:host {
+  display: block;
+  min-width: 0;
+  color: #e2e8f0;
+}
+
+.devices-section {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+h2, h3, h4, p {
+  margin: 0;
+}
+
+h2 { font-size: 22px; }
+h3 { font-size: 17px; }
+h4 { font-size: 15px; }
+
+p, small {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.section-header p {
+  margin-top: 5px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.summary-card,
+.panel,
+.profile-card {
+  min-width: 0;
+  border: 1px solid #29384d;
+  border-radius: 12px;
+  background: #111e31;
+  padding: 18px;
+}
+
+.summary-card {
+  display: grid;
+  gap: 8px;
+}
+
+.summary-card span {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.summary-card strong {
+  font-size: 28px;
+  color: #60a5fa;
+}
+
+.summary-card .green {
+  color: #4ade80;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
+  gap: 10px;
+  margin: 20px 0;
+}
+
+input, select, button {
+  box-sizing: border-box;
+  min-height: 42px;
+  min-width: 0;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px 13px;
+  color: #e2e8f0;
+  background: #0b1728;
+  font: inherit;
+  font-size: 13px;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: #1e3a5f;
+}
+
+button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #29384d;
+  border-radius: 9px;
+}
+
+table {
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+th, td {
+  padding: 14px 12px;
+  border-bottom: 1px solid #29384d;
+  font-size: 12px;
+}
+
+th {
+  color: #94a3b8;
+  background: #17263a;
+  white-space: nowrap;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+tbody tr:hover {
+  background: #17263a;
+}
+
+.device-name,
+.profile-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.device-name svg {
+  flex-shrink: 0;
+  color: #60a5fa;
+}
+
+.identifier {
+  color: #93c5fd;
+  overflow-wrap: anywhere;
+}
+
+.chip, .status-chip {
+  display: inline-block;
+  padding: 5px 10px;
+  border: 1px solid #334155;
+  border-radius: 20px;
+  font-size: 11px;
+  color: #93c5fd;
+}
+
+.status-chip {
+  text-transform: capitalize;
+}
+
+.status-chip.online {
+  color: #86efac;
+  background: #15352f;
+}
+
+.status-chip.offline {
+  color: #fca5a5;
+  background: #38222d;
+}
+
+.status-chip.quarantined,
+.chip.restricted {
+  color: #fcd34d;
+  background: #382e1c;
+}
+
+.notice {
+  margin: 18px 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: #172e47;
+  color: #bfdbfe;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #0e192a;
+}
+
+.profile-card.selected {
+  border-color: #60a5fa;
+}
+
+.profile-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #1b3452;
+  color: #60a5fa;
+}
+
+.metric-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.meter {
+  height: 7px;
+  border-radius: 8px;
+  background: #29384d;
+  overflow: hidden;
+}
+
+.criticality-fill,
+.exposure-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #f59e0b;
+}
+
+.criticality-fill.high {
+  background: #ef4444;
+}
+
+.exposure-fill {
+  background: #3b82f6;
+}
+
+.policy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.select-button {
+  margin-top: auto;
+  width: 100%;
+  color: #bfdbfe;
+}
+
+.selected .select-button {
+  background: #1d4ed8;
+  color: white;
+}
+
+.selection-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #315b8a;
+  border-radius: 9px;
+}
+
+.message {
+  padding: 24px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.message.error {
+  color: #fca5a5;
+}
+
+@media (max-width: 1250px) {
+  .profile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .summary-grid,
+  .profile-grid,
+  .filter-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .summary-card strong {
+    font-size: 23px;
+  }
+
+  h2 {
+    font-size: 19px;
+  }
+}
+
+
+========================================
+FILE: frontend/src/app/components/device-form/device-form.html
+========================================
+<section class="form-section">
+  <div class="section-header">
+    <div class="heading-content">
+      <div class="heading-icon">ï¼‹</div>
+      <div>
+        <h2>Register IoT Device</h2>
+        <p>Add and configure a new device in your IoT monitoring network.</p>
+      </div>
+    </div>
+
+    <span class="form-tag">
+      <span class="tag-dot"></span>
+      Device Enrollment
+    </span>
+  </div>
+
+  <form (ngSubmit)="registerDevice()">
+    <div class="form-intro">
+      <h3>Device Information</h3>
+      <p>Enter the device details below. Fields marked with * are required.</p>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="deviceName">Device Name <span>*</span></label>
+        <input
+          id="deviceName"
+          type="text"
+          name="deviceName"
+          [(ngModel)]="deviceName"
+          placeholder="e.g. Temperature Sensor 01"
+          autocomplete="off"
+          required
+        />
+        <small>A recognizable name for your IoT device.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="deviceIdentifier">Device Identifier <span>*</span></label>
+        <input
+          id="deviceIdentifier"
+          type="text"
+          name="deviceIdentifier"
+          [(ngModel)]="deviceIdentifier"
+          placeholder="e.g. IOT-DEVICE-001"
+          autocomplete="off"
+          required
+        />
+        <small>Must be unique for each registered device.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="deviceType">Device Type <span>*</span></label>
+        <select id="deviceType" name="deviceType" [(ngModel)]="deviceType" required>
+          <option value="temperature_sensor">Temperature Sensor</option>
+          <option value="humidity_sensor">Humidity Sensor</option>
+          <option value="motion_sensor">Motion Sensor</option>
+          <option value="smart_camera">Smart Camera</option>
+          <option value="smart_meter">Smart Meter</option>
+          <option value="other">Other</option>
+        </select>
+        <small>Select the category that best describes the device.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="deviceLocation">Device Location</label>
+        <input
+          id="deviceLocation"
+          type="text"
+          name="deviceLocation"
+          [(ngModel)]="deviceLocation"
+          placeholder="e.g. Laboratory"
+        />
+        <small>Optional physical location of the device.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="deviceStatus">Initial Device Status</label>
+        <select id="deviceStatus" name="deviceStatus" [(ngModel)]="deviceStatus">
+          <option value="online">Online</option>
+          <option value="offline">Offline</option>
+          <option value="unknown">Unknown</option>
+          <option value="quarantined">Quarantined</option>
+        </select>
+        <small>Choose the initial status for this device.</small>
+      </div>
+    </div>
+
+    <div class="form-footer">
+      <div class="required-note"><span>*</span> Required fields</div>
+
+      <button type="submit" [disabled]="savingDevice()">
+        @if (savingDevice()) {
+          <span class="button-spinner"></span>
+          Registering Device...
+        } @else {
+          <span class="button-icon">ï¼‹</span>
+          Register Device
+        }
+      </button>
+    </div>
+
+    @if (deviceMessage()) {
+      <div
+        class="device-message"
+        [class.success]="deviceMessageType() === 'success'"
+        [class.error]="deviceMessageType() === 'error'"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="message-icon">
+          {{ deviceMessageType() === 'success' ? 'âœ“' : '!' }}
+        </span>
+        {{ deviceMessage() }}
+      </div>
+    }
+  </form>
+</section>
+
+
+========================================
+FILE: frontend/src/app/components/device-form/device-form.scss
+========================================
+:host {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: #e2e8f0;
+}
+
+.section-header,
+.heading-content,
+.form-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.section-header,
+.form-footer {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.heading-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #1b3452;
+  color: #60a5fa;
+  font-size: 24px;
+}
+
+h2, h3, p {
+  margin: 0;
+}
+
+h2 {
+  font-size: 22px;
+  color: #f1f5f9;
+}
+
+h3 {
+  font-size: 16px;
+  color: #f1f5f9;
+}
+
+p, small {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.form-tag {
+  padding: 8px 12px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+form {
+  padding: clamp(16px, 3vw, 24px);
+  border: 1px solid #26364d;
+  border-radius: 12px;
+  background: #111e31;
+}
+
+.form-intro {
+  margin-bottom: 22px;
+}
+
+.form-intro p {
+  margin-top: 6px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+label {
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+label span,
+.required-note span {
+  color: #f87171;
+}
+
+input,
+select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0b1728;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 13px;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+input::placeholder {
+  color: #8493a8;
+}
+
+.form-footer {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #26364d;
+}
+
+.required-note {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.device-message {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.device-message.success {
+  color: #86efac;
+  background: rgba(34, 197, 94, .08);
+  border-color: rgba(34, 197, 94, .25);
+}
+
+.device-message.error {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, .08);
+  border-color: rgba(239, 68, 68, .25);
+}
+
+.button-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, .3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 650px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-footer button {
+    width: 100%;
+  }
+
+  h2 {
+    font-size: 19px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button-spinner {
+    animation: none;
+  }
+}
+
+
+========================================
+FILE: frontend/src/app/shared/components/device-context-selector/device-context-selector.html
+========================================
+<section class="context-panel">
+
+  <header class="context-header">
+
+    <div class="heading-content">
+
+      <div class="heading-icon">
+
+        <svg viewBox="0 0 24 24"
+             width="24"
+             height="24"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="1.7"
+             aria-hidden="true">
+
+          <rect x="9" y="2" width="6" height="6" rx="1"/>
+          <rect x="2" y="16" width="6" height="6" rx="1"/>
+          <rect x="16" y="16" width="6" height="6" rx="1"/>
+          <path d="M12 8v4M5 16v-4h14v4"/>
+
+        </svg>
+
+      </div>
+
+      <div>
+
+        <h3>Device Security Context</h3>
+
+        <p>Select a demonstration profile for risk assessment.</p>
+
+      </div>
+
+    </div>
+
+    <button
+      type="button"
+      class="secondary-button"
+      (click)="refreshProfiles()"
+      [disabled]="disabled() || context.loading()">
+
+      Refresh Profiles
+
+    </button>
+
+  </header>
+
+  <div class="notice">
+
+    Device profiles provide security context only.
+    They do not establish physical device identity
+    or authorize containment.
+
+  </div>
+
+  @if (context.loading()) {
+
+    <div class="state-message" role="status">
+
+      <span class="spinner"></span>
+
+      Loading device profiles...
+
+    </div>
+
+  } @else if (context.error()) {
+
+    <div class="state-message error" role="alert">
+
+      {{ context.error() }}
+
+    </div>
+
+    <button
+      type="button"
+      class="secondary-button"
+      (click)="refreshProfiles()"
+      [disabled]="disabled()">
+
+      Retry
+
+    </button>
+
+  } @else if (context.loaded()) {
+
+    <div class="selection-field">
+
+      <label>
+
+        Device Context Profile
+
+        <select
+          [value]="context.selectedDeviceId() ?? ''"
+          (change)="changeContext($event)"
+          [disabled]="disabled()">
+
+          <option value="">
+
+            Unknown Device - Fallback Context
+
+          </option>
+
+          @for (profile of context.profiles(); track profile.device_id) {
+
+            <option [value]="profile.device_id">
+
+              {{ profile.device_name }} - {{ profile.device_id }}
+
+            </option>
+
+          }
+
+        </select>
+
+      </label>
+
+      <button
+        type="button"
+        class="secondary-button"
+        (click)="clearContext()"
+        [disabled]="disabled() || !context.selectedDeviceId()">
+
+        Clear Selection
+
+      </button>
+
+    </div>
+
+    @if (context.selectedProfile(); as profile) {
+
+      <div class="profile-information">
+
+        <div>
+
+          <h4>{{ profile.device_name }}</h4>
+
+          <p>{{ profile.business_function }}</p>
+
+        </div>
+
+        <span class="chip">{{ profile.device_id }}</span>
+
+      </div>
+
+      <div class="metrics-grid">
+
+        <article class="metric-card">
+
+          <span>Device Criticality</span>
+
+          <strong
+            [class.high-criticality]="profile.criticality >= 0.9">
+
+            {{ profile.criticality * 100 | number:'1.0-1' }}%
+
+          </strong>
+
+          <div class="meter"
+               role="meter"
+               aria-label="Device criticality"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               [attr.aria-valuenow]="profile.criticality * 100">
+
+            <div class="criticality-fill"
+                 [class.high]="profile.criticality >= 0.9"
+                 [style.width.%]="profile.criticality * 100">
+            </div>
+
+          </div>
+
+        </article>
+
+        <article class="metric-card">
+
+          <span>Network Exposure</span>
+
+          <strong class="blue">
+
+            {{ profile.exposure * 100 | number:'1.0-1' }}%
+
+          </strong>
+
+          <div class="meter"
+               role="meter"
+               aria-label="Network exposure"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               [attr.aria-valuenow]="profile.exposure * 100">
+
+            <div class="exposure-fill"
+                 [style.width.%]="profile.exposure * 100">
+            </div>
+
+          </div>
+
+        </article>
+
+      </div>
+
+      <div class="policy-list">
+
+        <div class="policy-row">
+
+          <span>Context source</span>
+
+          <strong>Demonstration inventory</strong>
+
+        </div>
+
+        <div class="policy-row">
+
+          <span>Identity verification</span>
+
+          <strong class="warning">Unverified</strong>
+
+        </div>
+
+        <div class="policy-row">
+
+          <span>Profile containment policy</span>
+
+          <strong
+            [class.warning]="!profile.containment_allowed">
+
+            {{ profile.containment_allowed
+                ? 'Consideration permitted'
+                : 'Restricted' }}
+
+          </strong>
+
+        </div>
+
+        <div class="policy-row">
+
+          <span>Containment authorization</span>
+
+          <strong class="warning">Not authorized</strong>
+
+        </div>
+
+      </div>
+
+    } @else {
+
+      <div class="fallback-panel">
+
+        <h4>Unknown Device Context</h4>
+
+        <p>
+          No demonstration device profile is selected.
+          The backend will use its conservative fallback
+          when risk assessment is requested.
+        </p>
+
+        <div class="metrics-grid">
+
+          <article class="metric-card">
+
+            <span>Fallback Criticality</span>
+
+            <strong>50%</strong>
+
+          </article>
+
+          <article class="metric-card">
+
+            <span>Fallback Exposure</span>
+
+            <strong class="blue">50%</strong>
+
+          </article>
+
+        </div>
+
+        <div class="policy-row">
+
+          <span>Containment policy</span>
+
+          <strong class="warning">Restricted</strong>
+
+        </div>
+
+      </div>
+
+    }
+
+  }
+
+  <footer class="context-footer">
+
+    <span class="simulation-dot"></span>
+
+    Simulation only. Selecting a profile does not
+    perform risk assessment or execute network actions.
+
+  </footer>
+
+</section>
+
+
+========================================
+FILE: frontend/src/app/shared/components/device-context-selector/device-context-selector.scss
+========================================
+:host {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  color: #e2e8f0;
+}
+
+.context-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid #29384d;
+  border-radius: 12px;
+  background: #111e31;
+}
+
+.context-header,
+.heading-content,
+.profile-information,
+.selection-field,
+.policy-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.context-header,
+.profile-information,
+.policy-row {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.heading-content {
+  min-width: 0;
+}
+
+.heading-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #1b3452;
+  color: #60a5fa;
+}
+
+h3, h4, p {
+  margin: 0;
+}
+
+h3 {
+  font-size: 18px;
+  color: #f1f5f9;
+}
+
+h4 {
+  font-size: 15px;
+  color: #e2e8f0;
+}
+
+p {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #94a3b8;
+}
+
+.notice {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #172e47;
+  color: #bfdbfe;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.selection-field {
+  align-items: flex-end;
+}
+
+.selection-field label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+select,
+.secondary-button {
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #0b1728;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 13px;
+}
+
+select {
+  width: 100%;
+}
+
+.secondary-button {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: #1e3a5f;
+  border-color: #60a5fa;
+}
+
+select:disabled,
+.secondary-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+select:focus-visible,
+.secondary-button:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.chip {
+  padding: 6px 10px;
+  border: 1px solid #334155;
+  border-radius: 20px;
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #29384d;
+  border-radius: 10px;
+  background: #0e192a;
+}
+
+.metric-card span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.metric-card strong {
+  font-size: 25px;
+  color: #fbbf24;
+}
+
+.metric-card strong.blue {
+  color: #60a5fa;
+}
+
+.metric-card strong.high-criticality {
+  color: #f87171;
+}
+
+.meter {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #29384d;
+}
+
+.criticality-fill,
+.exposure-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #f59e0b;
+}
+
+.criticality-fill.high {
+  background: #ef4444;
+}
+
+.exposure-fill {
+  background: #3b82f6;
+}
+
+.policy-list {
+  border: 1px solid #29384d;
+  border-radius: 9px;
+  padding: 0 14px;
+}
+
+.policy-row {
+  padding: 12px 0;
+  font-size: 12px;
+  border-bottom: 1px solid #29384d;
+}
+
+.policy-row:last-child {
+  border-bottom: 0;
+}
+
+.policy-row span {
+  color: #94a3b8;
+}
+
+.policy-row strong {
+  color: #bfdbfe;
+  font-weight: 500;
+}
+
+.policy-row strong.warning {
+  color: #fbbf24;
+}
+
+.fallback-panel {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid #334155;
+  border-radius: 9px;
+  background: #0e192a;
+}
+
+.context-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #29384d;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #94a3b8;
+}
+
+.simulation-dot {
+  flex: 0 0 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fbbf24;
+}
+
+.state-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.state-message.error {
+  color: #fca5a5;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #334155;
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 600px) {
+  .selection-field {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .context-header > button {
+    width: 100%;
+  }
+
+  h3 {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+

@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal, DestroyRef } from '@angular/core';
 
+import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
@@ -18,12 +19,14 @@ import { CsvUpload } from '../csv-upload/csv-upload';
 import { PredictionTrends } from '../prediction-trends/prediction-trends';
 import { AssistantChat } from '../assistant-chat/assistant-chat';
 
-export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'analysis' | 'reports';
+export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'analysis' | 'reports' | 'detection' | 'response-center' | 'assistant' | 'not-found';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   imports: [
+    RouterLink,
+    RouterLinkActive,
     BackendStatus,
     Devices,
     DeviceForm,
@@ -40,6 +43,7 @@ export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'an
 })
 export class Dashboard implements OnInit {
   private readonly api = inject(Api);
+  private readonly route = inject(ActivatedRoute);
   private readonly browserTitle = inject(Title);
   protected readonly menuOpen = signal(false);
 
@@ -71,7 +75,17 @@ export class Dashboard implements OnInit {
   // --------------------------------------------------
 
   ngOnInit(): void {
-    this.browserTitle.setTitle(`${this.getPageTitle()} | IoT Sentinel`);
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
+      const views: Record<string, DashboardView> = {
+        dashboard: 'dashboard', incidents: 'alerts', devices: 'devices',
+        'traffic-monitor': 'traffic', explainability: 'analysis', reports: 'reports',
+        detection: 'detection', 'response-center': 'response-center', assistant: 'assistant',
+      };
+      const page = params.get('page') ?? '';
+      this.activeView.set(Object.prototype.hasOwnProperty.call(views, page) ? views[page] : 'not-found');
+      this.menuOpen.set(false);
+      this.browserTitle.setTitle(`${this.getPageTitle()} | IoT Sentinel`);
+    });
     this.loadDevices();
     this.loadAnalytics();
     this.connectPredictionWebSocket();
@@ -81,16 +95,6 @@ export class Dashboard implements OnInit {
   // SIDEBAR NAVIGATION
   // --------------------------------------------------
 
-  protected navigateTo(view: DashboardView): void {
-    this.activeView.set(view);
-    this.menuOpen.set(false);
-    this.browserTitle.setTitle(`${this.getPageTitle()} | IoT Sentinel`);
-  }
-
-  protected isActive(view: DashboardView): boolean {
-    return this.activeView() === view;
-  }
-
   protected getPageTitle(): string {
     const titles: Record<DashboardView, string> = {
       dashboard: 'Security Overview',
@@ -99,6 +103,10 @@ export class Dashboard implements OnInit {
       traffic: 'Traffic Monitoring',
       analysis: 'Explainable AI Analysis',
       reports: 'Reports and Batch Analysis',
+      detection: 'Intrusion Detection',
+      'response-center': 'Response Center',
+      assistant: 'AI Assistant',
+      'not-found': 'Page Not Found',
     };
 
     return titles[this.activeView()];

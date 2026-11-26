@@ -1,0 +1,5883 @@
+﻿
+========================================
+FILE: frontend/src/app/components/detection/detection.ts
+========================================
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  inject,
+  signal,
+  computed,
+} from '@angular/core';
+
+import { FormsModule } from '@angular/forms';
+import { DecimalPipe } from '@angular/common';
+
+import {
+  DeviceContextSelector,
+} from '../../shared/components/device-context-selector/device-context-selector';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize } from 'rxjs';
+
+import {
+  MulticlassApiService,
+} from '../../core/services/multiclass-api.service';
+
+import {
+  NotificationService,
+} from '../../core/services/notification.service';
+
+import {
+  ATTACK_LABELS,
+} from '../../core/models/prediction.model';
+
+import type {
+  ModelInfo,
+  TrafficFeatures,
+  AttackFamily,
+  MulticlassPredictionResponse,
+} from '../../core/models/prediction.model';
+
+import {
+  getApiErrorMessage,
+} from '../../shared/utilities/api-error';
+
+@Component({
+  selector: 'app-detection',
+  standalone: true,
+  imports: [
+    FormsModule,
+    DecimalPipe,
+    DeviceContextSelector,
+  ],
+  templateUrl: './detection.html',
+  styleUrl: './detection.scss',
+})
+export class Detection implements OnInit {
+
+  private readonly api = inject(MulticlassApiService);
+
+  private readonly notifications =
+    inject(NotificationService);
+
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected readonly modelInfo =
+    signal<ModelInfo | null>(null);
+
+  protected readonly modelLoading = signal(false);
+
+  protected readonly modelError = signal('');
+
+  protected readonly submitting = signal(false);
+
+  protected readonly errorMessage = signal('');
+
+  protected readonly result =
+    signal<MulticlassPredictionResponse | null>(null);
+
+  protected readonly families =
+    Object.values(ATTACK_LABELS);
+
+  protected trafficJson = '';
+
+  protected readonly statusLabels: Record<string, string> = {
+    low_probability: 'Low attack probability',
+    suspicious: 'Suspicious traffic',
+    elevated_suspicion: 'Elevated suspicion',
+    high_confidence_attack: 'High-confidence attack',
+  };
+
+  protected readonly probabilityRows = computed(() => {
+
+    const prediction = this.result();
+
+    if (!prediction) {
+      return [];
+    }
+
+    return this.families.map(family => ({
+      family,
+      probability: prediction.class_probabilities[family],
+      predicted: prediction.predicted_family === family,
+    }));
+
+  });
+
+  protected readonly unsupportedClass = computed(() => {
+
+    const prediction = this.result();
+    const model = this.modelInfo();
+
+    if (!prediction || !model) {
+      return false;
+    }
+
+    return !model.validation_supported_labels.includes(
+      prediction.predicted_label
+    );
+
+  });
+
+  ngOnInit(): void {
+    this.loadModelInfo();
+  }
+
+  protected loadModelInfo(): void {
+
+    if (this.modelLoading() || this.submitting()) {
+      return;
+    }
+
+    this.modelLoading.set(true);
+    this.modelError.set('');
+    this.modelInfo.set(null);
+
+    this.api.getModelInfo().pipe(
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.modelLoading.set(false))
+    ).subscribe({
+
+      next: info => {
+
+        if (
+          !Array.isArray(info.features) ||
+          info.feature_count !== 36 ||
+          info.features.length !== 36 ||
+          info.class_count !== 8
+        ) {
+          this.modelError.set(
+            'Unexpected model configuration.'
+          );
+          return;
+        }
+
+        this.modelInfo.set(info);
+
+      },
+
+      error: error => {
+        this.modelError.set(getApiErrorMessage(error));
+      },
+
+    });
+
+  }
+
+  protected loadTemplate(): void {
+
+    const model = this.modelInfo();
+
+    if (!model || this.submitting()) {
+      return;
+    }
+
+    const template = Object.fromEntries(
+      model.features.map(feature => [feature, null])
+    );
+
+    this.trafficJson = JSON.stringify(
+      template, null, 2
+    );
+
+    this.result.set(null);
+    this.errorMessage.set('');
+
+    this.notifications.info(
+      'Replace every null value with a measured numerical feature.',
+      'Feature template loaded'
+    );
+
+  }
+
+  protected clearInput(): void {
+
+    if (this.submitting()) {
+      return;
+    }
+
+    this.trafficJson = '';
+    this.errorMessage.set('');
+    this.result.set(null);
+
+  }
+
+  protected onInputChange(value: string): void {
+
+    this.trafficJson = value;
+    this.errorMessage.set('');
+    this.result.set(null);
+
+  }
+
+  private validateFeatures(): TrafficFeatures {
+
+    const model = this.modelInfo();
+
+    if (!model) {
+      throw new Error(
+        'Model information is unavailable.'
+      );
+    }
+
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(this.trafficJson);
+    } catch {
+      throw new Error(
+        'Invalid JSON. Enter a valid traffic feature object.'
+      );
+    }
+
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error(
+        'Traffic features must be a JSON object.'
+      );
+    }
+
+    const input = parsed as Record<string, unknown>;
+
+    const missing = model.features.filter(
+      feature => !Object.prototype.hasOwnProperty.call(
+        input, feature
+      )
+    );
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing features: ${missing.join(', ')}`
+      );
+    }
+
+    const extra = Object.keys(input).filter(
+      feature => !model.features.includes(feature)
+    );
+
+    if (extra.length > 0) {
+      throw new Error(
+        `Unexpected features: ${extra.join(', ')}`
+      );
+    }
+
+    const invalid = model.features.filter(feature => {
+
+      const value = input[feature];
+
+      return (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        Math.abs(value) > 3.4028234663852886e38
+      );
+
+    });
+
+    if (invalid.length > 0) {
+      throw new Error(
+        `Invalid numerical values: ${invalid.join(', ')}`
+      );
+    }
+
+    const ordered = Object.fromEntries(
+      model.features.map(feature => [
+        feature,
+        input[feature],
+      ])
+    );
+
+    return ordered as unknown as TrafficFeatures;
+
+  }
+
+  private validateResponse(
+    response: MulticlassPredictionResponse
+  ): boolean {
+
+    const model = this.modelInfo();
+
+    const validProbability = (value: unknown): boolean =>
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 1;
+
+    if (
+      !response ||
+      !model ||
+      response.model_version !== model.model_version ||
+      ATTACK_LABELS[response.predicted_label] !==
+        response.predicted_family ||
+      !validProbability(response.prediction_confidence) ||
+      !validProbability(response.raw_attack_probability) ||
+      !validProbability(response.calibrated_attack_probability) ||
+      !response.class_probabilities ||
+      !this.families.every(family =>
+        validProbability(
+          response.class_probabilities[family]
+        )
+      ) ||
+      !Object.prototype.hasOwnProperty.call(
+        this.statusLabels,
+        response.detection_status
+      ) ||
+      response.mode !== 'prediction_only' ||
+      response.incident_created !== false ||
+      response.response_executed !== false
+    ) {
+      return false;
+    }
+
+    const sum = this.families.reduce(
+      (total, family) =>
+        total + response.class_probabilities[family],
+      0
+    );
+
+    return Math.abs(sum - 1) < 0.0001;
+
+  }
+
+  protected detectTraffic(): void {
+
+    if (this.submitting() || !this.modelInfo()) {
+      return;
+    }
+
+    this.errorMessage.set('');
+    this.result.set(null);
+
+    let features: TrafficFeatures;
+
+    try {
+      features = this.validateFeatures();
+    } catch (error) {
+
+      this.errorMessage.set(
+        error instanceof Error
+          ? error.message
+          : 'Invalid traffic features.'
+      );
+
+      return;
+
+    }
+
+    this.submitting.set(true);
+
+    this.api.predict({
+      features,
+      source: 'manual',
+    }).pipe(
+
+      takeUntilDestroyed(this.destroyRef),
+
+      finalize(() => this.submitting.set(false))
+
+    ).subscribe({
+
+      next: response => {
+
+        if (!this.validateResponse(response)) {
+
+          this.errorMessage.set(
+            'Unexpected prediction response. Check the backend model and API contract.'
+          );
+
+          return;
+
+        }
+
+        this.result.set(response);
+
+        if (response.high_confidence_alert) {
+
+          this.notifications.warning(
+            `Predicted family: ${response.predicted_family}. Further assessment is recommended.`,
+            'High-confidence attack'
+          );
+
+        } else {
+
+          this.notifications.success(
+            'Multiclass prediction completed.',
+            'Analysis completed'
+          );
+
+        }
+
+      },
+
+      error: error => {
+
+        this.errorMessage.set(
+          getApiErrorMessage(error)
+        );
+
+      },
+
+    });
+
+  }
+
+}
+
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.html
+========================================
+<div class="detection-page">
+
+  <section class="detection-heading">
+
+    <div class="heading-icon">
+      <svg viewBox="0 0 24 24" width="28" height="28"
+           fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z"/>
+        <path d="M12 8v5m0 4h.01"/>
+      </svg>
+    </div>
+
+    <div>
+      <h2>Multiclass Intrusion Detection</h2>
+      <p>
+        Analyze network traffic using the calibrated
+        multiclass Random Forest model.
+      </p>
+    </div>
+
+  </section>
+
+  @if (modelLoading()) {
+
+    <div class="panel loading-panel" role="status">
+      <span class="spinner"></span>
+      Loading model information...
+    </div>
+
+  }
+
+  @if (modelError()) {
+
+    <div class="error-panel" role="alert">
+      <p>{{ modelError() }}</p>
+
+      <button type="button" class="secondary-button"
+              (click)="loadModelInfo()">
+        Retry
+      </button>
+    </div>
+
+  }
+
+  @if (modelInfo(); as model) {
+
+    <section class="model-grid">
+
+      <div class="metric-card">
+        <span>Classification classes</span>
+        <strong>{{ model.class_count }}</strong>
+      </div>
+
+      <div class="metric-card">
+        <span>Required features</span>
+        <strong>{{ model.feature_count }}</strong>
+      </div>
+
+      <div class="metric-card">
+        <span>High-confidence threshold</span>
+        <strong>
+          {{ model.high_confidence_threshold * 100 | number:'1.0-1' }}%
+        </strong>
+      </div>
+
+      <div class="metric-card">
+        <span>Probability calibration</span>
+        <strong class="green">
+          {{ model.calibrated ? 'Enabled' : 'Disabled' }}
+        </strong>
+      </div>
+
+    </section>
+
+    <section class="panel model-panel">
+
+      <h3>Model Information</h3>
+
+      <div class="metadata-grid">
+
+        <div>
+          <span>Algorithm</span>
+          <strong>{{ model.algorithm }}</strong>
+        </div>
+
+        <div>
+          <span>Model version</span>
+          <strong>{{ model.model_version }}</strong>
+        </div>
+
+        <div>
+          <span>Configuration</span>
+          <strong>{{ model.configuration }}</strong>
+        </div>
+
+        <div>
+          <span>Validation-supported classes</span>
+          <strong>
+            {{ model.validation_supported_labels.length }}
+            / {{ model.class_count }}
+          </strong>
+        </div>
+
+      </div>
+
+      <div class="family-list">
+        @for (family of families; track family) {
+          <span class="family-chip">{{ family }}</span>
+        }
+      </div>
+
+    </section>
+
+  }
+
+  <app-device-context-selector
+    [disabled]="submitting()">
+  </app-device-context-selector>
+
+  <div class="workspace">
+
+    <section class="panel input-panel">
+
+      <div class="panel-heading">
+        <h3>Network Traffic Input</h3>
+        <span class="mode-chip">Prediction only</span>
+      </div>
+
+      <p class="muted">
+        Enter a JSON object containing all 36 numerical
+        network traffic features.
+      </p>
+
+      <div class="button-row">
+
+        <button type="button" class="secondary-button"
+                (click)="loadTemplate()"
+                [disabled]="!modelInfo() || submitting()">
+          Load Feature Template
+        </button>
+
+        <button type="button" class="secondary-button"
+                (click)="clearInput()"
+                [disabled]="submitting()">
+          Clear
+        </button>
+
+      </div>
+
+      <label for="traffic-json">Traffic features (JSON)</label>
+
+      <textarea
+        id="traffic-json"
+        [ngModel]="trafficJson"
+        (ngModelChange)="onInputChange($event)"
+        [disabled]="submitting()"
+        placeholder="Paste network traffic features here..."
+        spellcheck="false"
+      ></textarea>
+
+      @if (errorMessage()) {
+        <div class="error-panel" role="alert">
+          {{ errorMessage() }}
+        </div>
+      }
+
+      <button
+        type="button"
+        class="primary-button"
+        (click)="detectTraffic()"
+        [disabled]="submitting() || !modelInfo() ||
+                    !trafficJson.trim()"
+      >
+
+        @if (submitting()) {
+          <span class="spinner"></span>
+          Analyzing Traffic...
+        } @else {
+          <svg viewBox="0 0 24 24" width="18" height="18"
+               fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round"
+               aria-hidden="true">
+            <circle cx="10" cy="10" r="6"/>
+            <path d="m15 15 6 6"/>
+          </svg>
+          Analyze Traffic
+        }
+
+      </button>
+
+      <p class="muted small">
+        This operation does not save a prediction,
+        create an incident or execute a response.
+      </p>
+
+    </section>
+
+    <section class="panel result-panel"
+             [attr.aria-busy]="submitting()">
+
+      <h3>Prediction Results</h3>
+
+      @if (submitting()) {
+
+        <div class="empty-state" role="status">
+          <span class="spinner large"></span>
+          <strong>Analyzing network traffic</strong>
+          <p>Waiting for the multiclass model.</p>
+        </div>
+
+      } @else if (result(); as prediction) {
+
+        <div class="prediction-banner"
+             [class.benign]="prediction.predicted_family === 'Benign'">
+
+          <span>Predicted family</span>
+
+          <strong>{{ prediction.predicted_family }}</strong>
+
+          <span>
+            {{ statusLabels[prediction.detection_status] }}
+          </span>
+
+        </div>
+
+        @if (unsupportedClass()) {
+
+          <div class="warning-panel" role="status">
+            This class was not represented in the validation
+            split. Its predictive reliability has not been
+            established by that validation experiment.
+          </div>
+
+        }
+
+        <div class="result-metrics">
+
+          <div class="metric-card">
+            <span>Model confidence</span>
+            <strong>
+              {{ prediction.prediction_confidence * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Calibrated attack probability</span>
+            <strong>
+              {{ prediction.calibrated_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Raw attack probability</span>
+            <strong>
+              {{ prediction.raw_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Benign class probability</span>
+            <strong>
+              {{ prediction.benign_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+        </div>
+
+        <h4>Class Probability Distribution</h4>
+
+        <div class="probability-list">
+
+          @for (item of probabilityRows(); track item.family) {
+
+            <div class="probability-row">
+
+              <span class="probability-label">
+                {{ item.family }}
+              </span>
+
+              <div class="probability-track"
+                   role="meter"
+                   [attr.aria-label]="item.family + ' probability'"
+                   aria-valuemin="0"
+                   aria-valuemax="100"
+                   [attr.aria-valuenow]="item.probability * 100">
+
+                <div
+                  class="probability-fill"
+                  [class.predicted]="item.predicted"
+                  [class.normal]="item.family === 'Benign'"
+                  [style.width.%]="item.probability * 100">
+                </div>
+
+              </div>
+
+              <strong>
+                {{ item.probability * 100 | number:'1.2-2' }}%
+              </strong>
+
+            </div>
+
+          }
+
+        </div>
+
+        <div class="information-panel">
+
+          <strong>Probability interpretation</strong>
+
+          <p>
+            Individual family probabilities are uncalibrated.
+            Calibration applies only to the overall attack
+            versus benign probability.
+          </p>
+
+          @if (!prediction.calibration_independently_validated) {
+            <p>
+              Calibration has not yet been independently
+              evaluated on the held-out test set.
+            </p>
+          }
+
+        </div>
+
+        <div class="metadata-grid">
+
+          <div>
+            <span>Incident created</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Response executed</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Context-aware risk</span>
+            <strong>Not assessed</strong>
+          </div>
+
+          <div>
+            <span>Model version</span>
+            <strong>{{ prediction.model_version }}</strong>
+          </div>
+
+        </div>
+
+      } @else {
+
+        <div class="empty-state">
+
+          <svg viewBox="0 0 24 24" width="52" height="52"
+               fill="none" stroke="currentColor"
+               stroke-width="1.3" stroke-linecap="round"
+               aria-hidden="true">
+            <path d="M3 3v18h18M7 16v-4m5 4V7m5 9v-6"/>
+          </svg>
+
+          <strong>No prediction available</strong>
+
+          <p>
+            Enter valid network traffic features and
+            select Analyze Traffic.
+          </p>
+
+        </div>
+
+      }
+
+    </section>
+
+  </div>
+
+</div>
+
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.scss
+========================================
+:host {
+  display: block;
+  min-width: 0;
+  color: #e2e8f0;
+}
+
+.detection-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.detection-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.heading-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, .1);
+}
+
+h2, h3, h4 {
+  margin: 0;
+  color: #f1f5f9;
+}
+
+h2 { font-size: 23px; }
+h3 { font-size: 17px; }
+h4 { font-size: 14px; }
+
+p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.muted, .detection-heading p {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.small { font-size: 12px; }
+
+.model-grid,
+.metadata-grid,
+.result-metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.model-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.panel, .metric-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #29384d;
+  border-radius: 14px;
+  background: #142033;
+}
+
+.metric-card {
+  display: grid;
+  gap: 9px;
+}
+
+.metric-card span,
+.metadata-grid span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.metric-card strong {
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+
+.green { color: #4ade80; }
+
+.metadata-grid {
+  margin-top: 16px;
+}
+
+.metadata-grid > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metadata-grid strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.family-list, .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.family-chip, .mode-chip {
+  border: 1px solid #304158;
+  border-radius: 20px;
+  padding: 6px 10px;
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+label {
+  display: block;
+  margin: 16px 0 8px;
+  font-size: 13px;
+}
+
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 380px;
+  padding: 14px;
+  resize: vertical;
+  border: 1px solid #34445c;
+  border-radius: 10px;
+  background: #0b1220;
+  color: #bfdbfe;
+  font: 13px/1.7 Consolas, monospace;
+}
+
+textarea:focus-visible, button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 10px 15px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.primary-button {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.secondary-button {
+  border: 1px solid #34445c;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.result-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.prediction-banner {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #7f3945;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, .08);
+  color: #fca5a5;
+}
+
+.prediction-banner.benign {
+  border-color: #276749;
+  background: rgba(34, 197, 94, .08);
+  color: #86efac;
+}
+
+.prediction-banner strong {
+  font-size: 30px;
+  overflow-wrap: anywhere;
+}
+
+.result-metrics .metric-card {
+  background: #0b1220;
+  padding: 12px;
+}
+
+.result-metrics strong { font-size: 20px; }
+
+.probability-list {
+  display: grid;
+  gap: 12px;
+}
+
+.probability-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.probability-row strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.probability-track {
+  height: 8px;
+  border-radius: 8px;
+  background: #29384d;
+  overflow: hidden;
+}
+
+.probability-fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: inherit;
+}
+
+.probability-fill.predicted { background: #ef4444; }
+.probability-fill.normal { background: #22c55e; }
+
+.empty-state {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.error-panel,
+.warning-panel,
+.information-panel {
+  padding: 13px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.error-panel {
+  background: #3b202b;
+  color: #fca5a5;
+}
+
+.warning-panel {
+  background: #382e1c;
+  color: #fcd34d;
+}
+
+.information-panel {
+  background: #142c43;
+  color: #bfdbfe;
+}
+
+.loading-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  border: 2px solid #64748b;
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+.spinner.large {
+  width: 42px;
+  height: 42px;
+  border-width: 3px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1200px) {
+  .model-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .detection-page { gap: 14px; }
+  .panel { padding: 14px; }
+  .metric-card { padding: 12px; }
+  h2 { font-size: 18px; }
+  textarea { min-height: 300px; }
+  .metadata-grid { grid-template-columns: minmax(0, 1fr); }
+  .probability-row {
+    grid-template-columns: 95px minmax(0, 1fr) 55px;
+    gap: 5px;
+  }
+  .metric-card strong { font-size: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+/* Phase 11.5.9 responsive refinement */
+.detection-page { gap: 14px; }
+.panel, .metric-card { padding: 14px; }
+textarea { min-height: 220px; height: clamp(220px, 34vh, 340px); }
+.empty-state { min-height: 180px; padding: 16px 0; }
+.metadata-grid, .family-list, .button-row { margin-top: 12px; }
+@media (max-width: 600px) {
+  .detection-heading { align-items: flex-start; gap: 10px; }
+  .heading-icon { width: 40px; height: 40px; }
+  .metric-card { padding: 10px; }
+  .result-metrics { grid-template-columns: minmax(0,1fr); }
+  .probability-row { grid-template-columns: 90px minmax(0,1fr) 52px; }
+  textarea { min-height: 200px; }
+}
+
+
+========================================
+FILE: frontend/src/app/core/models/prediction.model.ts
+========================================
+import type { TrafficFeatures } from '../../services/api';
+
+export type { TrafficFeatures };
+
+export type AttackLabel =
+  0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export type AttackFamily =
+  | 'Benign'
+  | 'DDoS'
+  | 'DoS'
+  | 'Reconnaissance'
+  | 'BruteForce'
+  | 'Spoofing'
+  | 'Mirai'
+  | 'WebBased';
+
+export const ATTACK_LABELS: Record<AttackLabel, AttackFamily> = {
+  0: 'Benign',
+  1: 'DDoS',
+  2: 'DoS',
+  3: 'Reconnaissance',
+  4: 'BruteForce',
+  5: 'Spoofing',
+  6: 'Mirai',
+  7: 'WebBased',
+};
+
+export type DetectionStatus =
+  | 'low_probability'
+  | 'suspicious'
+  | 'elevated_suspicion'
+  | 'high_confidence_attack';
+
+export type RiskLevel =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical';
+
+export interface MulticlassPrediction {
+  predicted_label: AttackLabel;
+  predicted_family: AttackFamily;
+  prediction: 'normal' | 'attack';
+  prediction_confidence: number;
+  candidate_attack_family: Exclude<AttackFamily, 'Benign'>;
+  candidate_attack_probability: number;
+  benign_probability: number;
+  raw_attack_probability: number;
+  attack_probability: number;
+  calibrated_attack_probability: number;
+  class_probabilities: Record<AttackFamily, number>;
+  class_probabilities_calibrated: boolean;
+  detection_status: DetectionStatus;
+  high_confidence_alert: boolean;
+  alert_threshold: number;
+  model_version: string;
+  calibration_scope: string;
+  calibration_independently_validated: boolean;
+}
+
+export interface MulticlassPredictionRequest {
+  features: TrafficFeatures;
+  source?: string;
+}
+
+export interface MulticlassPredictionResponse
+  extends MulticlassPrediction {
+  source: string;
+  incident_created: boolean;
+  response_executed: boolean;
+  mode: 'prediction_only';
+}
+
+export interface ModelInfo {
+  model_version: string;
+  algorithm: string;
+  configuration: string;
+  feature_count: number;
+  features: string[];
+  class_count: number;
+  labels: Record<string, AttackFamily>;
+  calibrated: boolean;
+  calibration_scope: string;
+  validation_supported_labels: number[];
+  high_confidence_threshold: number;
+}
+
+
+========================================
+FILE: frontend/src/app/core/models/risk-assessment.model.ts
+========================================
+import type {
+  AttackFamily,
+  MulticlassPrediction,
+  RiskLevel,
+  TrafficFeatures,
+} from './prediction.model';
+
+export type MaliciousAttackFamily =
+  Exclude<AttackFamily, 'Benign'>;
+
+
+// --------------------------------------------------
+// RISK ASSESSMENT REQUEST
+// --------------------------------------------------
+
+export interface RiskAssessmentRequest {
+
+  features: TrafficFeatures;
+
+  device_id?: string | null;
+
+  source?: string;
+
+}
+
+
+// --------------------------------------------------
+// DEVICE SECURITY CONTEXT
+// --------------------------------------------------
+
+export interface RiskDeviceContext {
+
+  device_id: string | null;
+
+  requested_device_id?: string | null;
+
+  device_name: string;
+
+  device_type: string;
+
+  criticality: number;
+
+  exposure: number;
+
+  business_function: string;
+
+  containment_allowed: boolean;
+
+  context_known: boolean;
+
+  context_source:
+    | 'demonstration_inventory'
+    | 'unknown_device_fallback';
+
+  identity_verified: false;
+
+  simulation_only: true;
+
+}
+
+
+// --------------------------------------------------
+// ATTACK IMPACT CONTRIBUTION
+// --------------------------------------------------
+
+export interface AttackImpactContribution {
+
+  attack_family: MaliciousAttackFamily;
+
+  class_probability: number;
+
+  conditional_probability: number;
+
+  impact_score: number;
+
+  weighted_contribution: number;
+
+}
+
+
+// --------------------------------------------------
+// EXPECTED ATTACK IMPACT
+// --------------------------------------------------
+
+export interface AttackImpactAssessment {
+
+  expected_impact: number;
+
+  raw_attack_probability: number;
+
+  impact_contributions: AttackImpactContribution[];
+
+  impact_available: boolean;
+
+  impact_policy_version: string;
+
+  class_probabilities_calibrated?: false;
+
+}
+
+
+// --------------------------------------------------
+// RISK FACTORS
+// --------------------------------------------------
+
+export interface RiskFactors {
+
+  criticality: number;
+
+  attack_impact: number;
+
+  exposure: number;
+
+}
+
+
+// --------------------------------------------------
+// RISK WEIGHTS
+// --------------------------------------------------
+
+export interface RiskWeights {
+
+  criticality: number;
+
+  attack_impact: number;
+
+  exposure: number;
+
+}
+
+
+// --------------------------------------------------
+// RISK CONTRIBUTIONS
+// --------------------------------------------------
+
+export interface RiskContributions {
+
+  criticality: number;
+
+  attack_impact: number;
+
+  exposure: number;
+
+}
+
+
+// --------------------------------------------------
+// RISK RECONSTRUCTION
+// --------------------------------------------------
+
+export interface RiskReconstruction {
+
+  contribution_sum: number;
+
+  error: number;
+
+  passed: boolean;
+
+}
+
+
+// --------------------------------------------------
+// RECOMMENDED ACTIONS
+// --------------------------------------------------
+
+export type RiskRecommendedAction =
+  | 'priority_investigation'
+  | 'alert_and_investigate'
+  | 'review_suspicious_activity'
+  | 'monitor_suspicious_activity'
+  | 'monitor_and_verify_device'
+  | 'record_and_monitor';
+
+
+// --------------------------------------------------
+// COMPLETE RISK ASSESSMENT
+// --------------------------------------------------
+
+export interface RiskAssessment {
+
+  risk_policy_version: string;
+
+  risk_score: number;
+
+  risk_level: RiskLevel;
+
+  attack_probability: number;
+
+  device_context: RiskDeviceContext;
+
+  attack_impact: AttackImpactAssessment;
+
+  risk_factors: RiskFactors;
+
+  risk_weights: RiskWeights;
+
+  risk_contributions: RiskContributions;
+
+  risk_reconstruction: RiskReconstruction;
+
+  recommended_action: RiskRecommendedAction;
+
+  requires_device_verification: boolean;
+
+  containment_authorized: false;
+
+  response_executed: false;
+
+  warnings: string[];
+
+}
+
+
+// --------------------------------------------------
+// COMPLETE API RESPONSE
+// --------------------------------------------------
+
+export interface RiskAssessmentResponse {
+
+  prediction: MulticlassPrediction;
+
+  risk_assessment: RiskAssessment;
+
+  mode: 'risk_assessment_only';
+
+  incident_created: false;
+
+  response_executed: false;
+
+  source: string;
+
+}
+
+
+// --------------------------------------------------
+// DISPLAY LABELS
+// --------------------------------------------------
+
+export const RISK_LEVEL_LABELS:
+  Record<RiskLevel, string> = {
+
+  low: 'Low',
+
+  medium: 'Medium',
+
+  high: 'High',
+
+  critical: 'Critical',
+
+};
+
+
+export const RISK_ACTION_LABELS:
+  Record<RiskRecommendedAction, string> = {
+
+  priority_investigation:
+    'Priority investigation',
+
+  alert_and_investigate:
+    'Alert and investigate',
+
+  review_suspicious_activity:
+    'Review suspicious activity',
+
+  monitor_suspicious_activity:
+    'Monitor suspicious activity',
+
+  monitor_and_verify_device:
+    'Monitor and verify device',
+
+  record_and_monitor:
+    'Record and monitor',
+
+};
+
+
+========================================
+FILE: frontend/src/app/core/services/multiclass-api.service.ts
+========================================
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, timeout } from 'rxjs';
+
+import { environment } from '../../../environments/environment';
+import { API_ENDPOINTS } from '../config/api-endpoints';
+
+import type {
+  ModelInfo,
+  MulticlassPredictionRequest,
+  MulticlassPredictionResponse,
+} from '../models/prediction.model';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class MulticlassApiService {
+
+  private readonly http = inject(HttpClient);
+
+  getModelInfo(): Observable<ModelInfo> {
+    return this.http.get<ModelInfo>(
+      API_ENDPOINTS.model.info
+    ).pipe(
+      timeout(environment.requestTimeoutMs)
+    );
+  }
+
+  predict(
+    request: MulticlassPredictionRequest
+  ): Observable<MulticlassPredictionResponse> {
+
+    return this.http.post<MulticlassPredictionResponse>(
+      API_ENDPOINTS.model.predict,
+      request
+    ).pipe(
+      timeout(environment.analysisTimeoutMs)
+    );
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/core/services/risk-assessment-api.service.ts
+========================================
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+
+import {
+  Observable,
+  map,
+  timeout,
+} from 'rxjs';
+
+import { environment } from '../../../environments/environment';
+
+import { API_ENDPOINTS } from '../config/api-endpoints';
+
+import { ATTACK_LABELS } from '../models/prediction.model';
+
+import {
+  RISK_ACTION_LABELS,
+  type RiskAssessmentRequest,
+  type RiskAssessmentResponse,
+} from '../models/risk-assessment.model';
+
+
+const EPSILON = 1e-6;
+
+const RISK_KEYS = [
+  'criticality',
+  'attack_impact',
+  'exposure',
+] as const;
+
+
+// --------------------------------------------------
+// VALIDATION HELPERS
+// --------------------------------------------------
+
+function requireValid(
+  condition: unknown,
+  message: string,
+): asserts condition {
+
+  if (!condition) {
+
+    throw new Error(
+      `Invalid risk assessment response: ${message}`
+    );
+
+  }
+
+}
+
+
+function asObject(
+  value: unknown,
+  name: string,
+): Record<string, unknown> {
+
+  requireValid(
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value),
+    `${name} must be an object`,
+  );
+
+  return value as Record<string, unknown>;
+
+}
+
+
+function asNumber(
+  value: unknown,
+  name: string,
+  max = 1,
+): number {
+
+  requireValid(
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= max + EPSILON,
+    `${name} is outside its valid range`,
+  );
+
+  return value;
+
+}
+
+
+function asText(
+  value: unknown,
+  name: string,
+): string {
+
+  requireValid(
+    typeof value === 'string' &&
+    value.trim().length > 0,
+    `${name} must be a non-empty string`,
+  );
+
+  return value;
+
+}
+
+
+function near(
+  actual: number,
+  expected: number,
+  name: string,
+): void {
+
+  requireValid(
+    Math.abs(actual - expected) <= EPSILON,
+    `${name} is inconsistent`,
+  );
+
+}
+
+
+// --------------------------------------------------
+// RISK RESPONSE VALIDATION
+// --------------------------------------------------
+
+export function validateRiskAssessmentResponse(
+  value: unknown,
+  request: RiskAssessmentRequest,
+): RiskAssessmentResponse {
+
+  const response = asObject(value, 'response');
+
+  const prediction = asObject(
+    response['prediction'],
+    'prediction',
+  );
+
+  const risk = asObject(
+    response['risk_assessment'],
+    'risk_assessment',
+  );
+
+  const context = asObject(
+    risk['device_context'],
+    'device_context',
+  );
+
+  const impact = asObject(
+    risk['attack_impact'],
+    'attack_impact',
+  );
+
+  const factors = asObject(
+    risk['risk_factors'],
+    'risk_factors',
+  );
+
+  const weights = asObject(
+    risk['risk_weights'],
+    'risk_weights',
+  );
+
+  const contributions = asObject(
+    risk['risk_contributions'],
+    'risk_contributions',
+  );
+
+  const reconstruction = asObject(
+    risk['risk_reconstruction'],
+    'risk_reconstruction',
+  );
+
+
+  // ------------------------------------------------
+  // RESPONSE MODE AND SAFETY
+  // ------------------------------------------------
+
+  requireValid(
+    response['mode'] === 'risk_assessment_only',
+    'unexpected response mode',
+  );
+
+  requireValid(
+    response['incident_created'] === false &&
+    response['response_executed'] === false &&
+    risk['response_executed'] === false &&
+    risk['containment_authorized'] === false,
+    'assessment-only safety contract violated',
+  );
+
+  requireValid(
+    context['identity_verified'] === false &&
+    context['simulation_only'] === true &&
+    risk['requires_device_verification'] === true,
+    'device safety contract violated',
+  );
+
+  requireValid(
+    response['source'] === (request.source ?? 'manual'),
+    'response source mismatch',
+  );
+
+
+  // ------------------------------------------------
+  // PREDICTION VALIDATION
+  // ------------------------------------------------
+
+  const families = Object.values(ATTACK_LABELS);
+
+  const label = prediction['predicted_label'];
+
+  requireValid(
+    typeof label === 'number' &&
+    Number.isInteger(label) &&
+    label >= 0 &&
+    label <= 7,
+    'invalid predicted label',
+  );
+
+  const family = prediction['predicted_family'];
+
+  requireValid(
+    family === ATTACK_LABELS[
+      label as keyof typeof ATTACK_LABELS
+    ],
+    'predicted family does not match label',
+  );
+
+  requireValid(
+    prediction['prediction'] ===
+      (label === 0 ? 'normal' : 'attack'),
+    'prediction type does not match label',
+  );
+
+  const probabilities = asObject(
+    prediction['class_probabilities'],
+    'class_probabilities',
+  );
+
+  requireValid(
+    Object.keys(probabilities).length === families.length,
+    'unexpected class probability count',
+  );
+
+  let probabilitySum = 0;
+  let rawAttackMass = 0;
+
+  for (const attackFamily of families) {
+
+    const probability = asNumber(
+      probabilities[attackFamily],
+      attackFamily,
+    );
+
+    probabilitySum += probability;
+
+    if (attackFamily !== 'Benign') {
+      rawAttackMass += probability;
+    }
+
+  }
+
+  near(probabilitySum, 1, 'class probability sum');
+
+  const confidence = asNumber(
+    prediction['prediction_confidence'],
+    'prediction confidence',
+  );
+
+  near(
+    confidence,
+    asNumber(probabilities[String(family)], 'family probability'),
+    'prediction confidence',
+  );
+
+  const candidate = prediction['candidate_attack_family'];
+
+  requireValid(
+    families.some(f => f !== 'Benign' && f === candidate),
+    'invalid candidate attack family',
+  );
+
+  near(
+    asNumber(
+      prediction['candidate_attack_probability'],
+      'candidate attack probability',
+    ),
+    asNumber(probabilities[String(candidate)], 'candidate probability'),
+    'candidate attack probability',
+  );
+
+  near(
+    asNumber(prediction['benign_probability'], 'benign probability'),
+    asNumber(probabilities['Benign'], 'Benign'),
+    'benign probability',
+  );
+
+  near(
+    asNumber(prediction['raw_attack_probability'], 'raw attack probability'),
+    rawAttackMass,
+    'raw attack probability',
+  );
+
+  const probability = asNumber(
+    prediction['calibrated_attack_probability'],
+    'calibrated attack probability',
+  );
+
+  near(
+    asNumber(prediction['attack_probability'], 'attack probability'),
+    probability,
+    'prediction attack probability',
+  );
+
+  near(
+    asNumber(risk['attack_probability'], 'risk attack probability'),
+    probability,
+    'risk attack probability',
+  );
+
+  requireValid(
+    prediction['class_probabilities_calibrated'] === false &&
+    prediction['calibration_independently_validated'] === false &&
+    prediction['calibration_scope'] === 'binary_attack_probability',
+    'unexpected calibration metadata',
+  );
+
+  asText(prediction['model_version'], 'model version');
+
+  const expectedDetectionStatus =
+    probability >= 0.90 ? 'high_confidence_attack' :
+    probability >= 0.75 ? 'elevated_suspicion' :
+    probability >= 0.50 ? 'suspicious' :
+    'low_probability';
+
+  requireValid(
+    prediction['detection_status'] === expectedDetectionStatus &&
+    prediction['high_confidence_alert'] === (probability >= 0.90),
+    'inconsistent detection status',
+  );
+
+  near(
+    asNumber(prediction['alert_threshold'], 'alert threshold'),
+    0.90,
+    'alert threshold',
+  );
+
+
+  // ------------------------------------------------
+  // DEVICE CONTEXT VALIDATION
+  // ------------------------------------------------
+
+  const criticality = asNumber(
+    context['criticality'],
+    'device criticality',
+  );
+
+  const exposure = asNumber(
+    context['exposure'],
+    'device exposure',
+  );
+
+  asText(context['device_name'], 'device name');
+  asText(context['device_type'], 'device type');
+  asText(context['business_function'], 'business function');
+
+  requireValid(
+    typeof context['context_known'] === 'boolean' &&
+    typeof context['containment_allowed'] === 'boolean',
+    'invalid device context flags',
+  );
+
+  if (context['context_known'] === true) {
+
+    requireValid(
+      typeof context['device_id'] === 'string' &&
+      context['device_id'] === request.device_id &&
+      context['context_source'] === 'demonstration_inventory',
+      'selected device context mismatch',
+    );
+
+  } else {
+
+    requireValid(
+      context['device_id'] === null &&
+      context['requested_device_id'] === (request.device_id ?? null) &&
+      context['context_source'] === 'unknown_device_fallback' &&
+      context['containment_allowed'] === false,
+      'invalid unknown-device fallback',
+    );
+
+    near(criticality, 0.50, 'fallback criticality');
+    near(exposure, 0.50, 'fallback exposure');
+
+  }
+
+
+  // ------------------------------------------------
+  // EXPECTED ATTACK IMPACT
+  // ------------------------------------------------
+
+  const expectedImpact = asNumber(
+    impact['expected_impact'],
+    'expected attack impact',
+  );
+
+  requireValid(
+    impact['impact_policy_version'] === 'attack_impact_v1',
+    'unsupported attack impact policy',
+  );
+
+  near(
+    asNumber(impact['raw_attack_probability'], 'impact attack mass'),
+    rawAttackMass,
+    'impact attack mass',
+  );
+
+  const impactRows = impact['impact_contributions'];
+
+  requireValid(
+    Array.isArray(impactRows),
+    'impact contributions must be an array',
+  );
+
+  if (rawAttackMass <= 1e-12) {
+
+    requireValid(
+      impact['impact_available'] === false &&
+      impactRows.length === 0,
+      'invalid unavailable-impact response',
+    );
+
+    near(expectedImpact, 0, 'unavailable attack impact');
+
+  } else {
+
+    requireValid(
+      impact['impact_available'] === true &&
+      impact['class_probabilities_calibrated'] === false &&
+      impactRows.length === 7,
+      'invalid attack impact metadata',
+    );
+
+    const seen = new Set<string>();
+
+    let impactSum = 0;
+    let conditionalSum = 0;
+
+    for (const item of impactRows) {
+
+      const row = asObject(item, 'impact contribution');
+
+      const attackFamily = asText(
+        row['attack_family'],
+        'impact attack family',
+      );
+
+      requireValid(
+        families.some(f => f !== 'Benign' && f === attackFamily) &&
+        !seen.has(attackFamily),
+        'invalid or duplicate impact family',
+      );
+
+      seen.add(attackFamily);
+
+      const classProbability = asNumber(
+        row['class_probability'],
+        'impact class probability',
+      );
+
+      const conditional = asNumber(
+        row['conditional_probability'],
+        'conditional probability',
+      );
+
+      const impactScore = asNumber(
+        row['impact_score'],
+        'family impact score',
+      );
+
+      const weighted = asNumber(
+        row['weighted_contribution'],
+        'weighted impact contribution',
+      );
+
+      near(
+        classProbability,
+        asNumber(probabilities[attackFamily], attackFamily),
+        'impact class probability',
+      );
+
+      near(
+        conditional,
+        classProbability / rawAttackMass,
+        'conditional attack probability',
+      );
+
+      near(
+        weighted,
+        conditional * impactScore,
+        'weighted attack impact',
+      );
+
+      conditionalSum += conditional;
+      impactSum += weighted;
+
+    }
+
+    near(conditionalSum, 1, 'conditional probability sum');
+    near(impactSum, expectedImpact, 'expected attack impact');
+
+  }
+
+
+  // ------------------------------------------------
+  // RISK CALCULATION VALIDATION
+  // ------------------------------------------------
+
+  requireValid(
+    risk['risk_policy_version'] === 'context_risk_v1',
+    'unsupported risk policy',
+  );
+
+  const score = asNumber(
+    risk['risk_score'],
+    'risk score',
+    100,
+  );
+
+  const expectedLevel =
+    score >= 75 ? 'critical' :
+    score >= 50 ? 'high' :
+    score >= 25 ? 'medium' :
+    'low';
+
+  requireValid(
+    risk['risk_level'] === expectedLevel,
+    'risk level does not match score',
+  );
+
+  const expectedFactors = {
+    criticality,
+    attack_impact: expectedImpact,
+    exposure,
+  };
+
+  const expectedWeights = {
+    criticality: 0.40,
+    attack_impact: 0.40,
+    exposure: 0.20,
+  };
+
+  let reconstructedScore = 0;
+
+  for (const key of RISK_KEYS) {
+
+    const factor = asNumber(
+      factors[key],
+      `${key} factor`,
+    );
+
+    const weight = asNumber(
+      weights[key],
+      `${key} weight`,
+    );
+
+    const contribution = asNumber(
+      contributions[key],
+      `${key} contribution`,
+      100,
+    );
+
+    near(factor, expectedFactors[key], `${key} factor`);
+
+    near(weight, expectedWeights[key], `${key} weight`);
+
+    near(
+      contribution,
+      100 * probability * weight * factor,
+      `${key} contribution`,
+    );
+
+    reconstructedScore += contribution;
+
+  }
+
+  near(reconstructedScore, score, 'risk score reconstruction');
+
+  near(
+    asNumber(reconstruction['contribution_sum'], 'contribution sum', 100),
+    reconstructedScore,
+    'reported contribution sum',
+  );
+
+  const reconstructionError = asNumber(
+    reconstruction['error'],
+    'reconstruction error',
+    100,
+  );
+
+  requireValid(
+    reconstruction['passed'] === true &&
+    reconstructionError <= 1e-8,
+    'backend risk reconstruction failed',
+  );
+
+
+  // ------------------------------------------------
+  // RECOMMENDATIONS AND WARNINGS
+  // ------------------------------------------------
+
+  const action = asText(
+    risk['recommended_action'],
+    'recommended action',
+  );
+
+  requireValid(
+    Object.prototype.hasOwnProperty.call(
+      RISK_ACTION_LABELS,
+      action,
+    ),
+    'unsupported recommended action',
+  );
+
+  const warnings = risk['warnings'];
+
+  requireValid(
+    Array.isArray(warnings) &&
+    warnings.every(
+      warning =>
+        typeof warning === 'string' &&
+        warning.trim().length > 0,
+    ),
+    'invalid risk warnings',
+  );
+
+  return value as RiskAssessmentResponse;
+
+}
+
+
+// --------------------------------------------------
+// ANGULAR HTTP SERVICE
+// --------------------------------------------------
+
+@Injectable({
+  providedIn: 'root',
+})
+export class RiskAssessmentApiService {
+
+  private readonly http = inject(HttpClient);
+
+
+  assessRisk(
+    request: RiskAssessmentRequest,
+  ): Observable<RiskAssessmentResponse> {
+
+    return this.http.post<unknown>(
+
+      API_ENDPOINTS.risk.assess,
+
+      request,
+
+    ).pipe(
+
+      timeout(environment.analysisTimeoutMs),
+
+      map(response =>
+        validateRiskAssessmentResponse(response, request)
+      ),
+
+    );
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/core/services/device-context.service.ts
+========================================
+import {
+  Injectable,
+  inject,
+  signal,
+  computed,
+} from '@angular/core';
+
+import { finalize } from 'rxjs';
+
+import { DeviceApiService } from './device-api.service';
+
+import type {
+  DeviceContextProfile,
+} from '../models/device.model';
+
+import {
+  getApiErrorMessage,
+} from '../../shared/utilities/api-error';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class DeviceContextService {
+
+  private readonly api = inject(DeviceApiService);
+
+  private readonly profileState =
+    signal<DeviceContextProfile[]>([]);
+
+  private readonly selectedIdState =
+    signal<string | null>(null);
+
+  private readonly loadingState = signal(false);
+
+  private readonly loadedState = signal(false);
+
+  private readonly errorState = signal('');
+
+  readonly profiles = this.profileState.asReadonly();
+
+  readonly selectedDeviceId =
+    this.selectedIdState.asReadonly();
+
+  readonly loading = this.loadingState.asReadonly();
+
+  readonly loaded = this.loadedState.asReadonly();
+
+  readonly error = this.errorState.asReadonly();
+
+  readonly selectedProfile = computed(() => {
+
+    const selectedId = this.selectedIdState();
+
+    return this.profileState().find(
+      profile => profile.device_id === selectedId
+    ) ?? null;
+
+  });
+
+  readonly totalProfiles = computed(
+    () => this.profileState().length
+  );
+
+  readonly restrictedProfiles = computed(
+    () => this.profileState().filter(
+      profile => !profile.containment_allowed
+    ).length
+  );
+
+  readonly verifiedProfiles = computed(
+    () => this.profileState().filter(
+      profile => profile.identity_verified
+    ).length
+  );
+
+  loadProfiles(force = false): void {
+
+    if (
+      this.loadingState() ||
+      (this.loadedState() && !force)
+    ) {
+      return;
+    }
+
+    this.loadingState.set(true);
+    this.errorState.set('');
+
+    this.api.getDeviceProfiles().pipe(
+
+      finalize(() => this.loadingState.set(false))
+
+    ).subscribe({
+
+      next: response => {
+
+        this.profileState.set(response.devices);
+        this.loadedState.set(true);
+
+        const selectedId = this.selectedIdState();
+
+        if (
+          selectedId !== null &&
+          !response.devices.some(
+            profile => profile.device_id === selectedId
+          )
+        ) {
+          this.selectedIdState.set(null);
+        }
+
+      },
+
+      error: error => {
+
+        this.profileState.set([]);
+        this.selectedIdState.set(null);
+        this.loadedState.set(false);
+
+        this.errorState.set(
+          getApiErrorMessage(error)
+        );
+
+      },
+
+    });
+
+  }
+
+  selectDevice(deviceId: string | null): boolean {
+
+    if (deviceId === null) {
+
+      this.selectedIdState.set(null);
+
+      return true;
+
+    }
+
+    if (
+      this.loadingState() ||
+      !this.loadedState() ||
+      !this.profileState().some(
+        profile => profile.device_id === deviceId
+      )
+    ) {
+      return false;
+    }
+
+    this.selectedIdState.set(deviceId);
+
+    return true;
+
+  }
+
+  clearSelection(): void {
+
+    this.selectedIdState.set(null);
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/core/services/notification.service.ts
+========================================
+import {
+  Injectable,
+  signal,
+} from '@angular/core';
+
+import type {
+  AppNotification,
+  NotificationType,
+} from '../models/notification.model';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class NotificationService {
+
+  private readonly items =
+    signal<AppNotification[]>([]);
+
+  readonly notifications =
+    this.items.asReadonly();
+
+  private readonly timers =
+    new Map<string, ReturnType<typeof setTimeout>>();
+
+  private sequence = 0;
+
+  private readonly maxNotifications = 5;
+
+  show(
+    type: NotificationType,
+    title: string,
+    message: string,
+    duration = 5000
+  ): string {
+
+    const existing = this.items().find(
+      item =>
+        item.type === type &&
+        item.title === title &&
+        item.message === message
+    );
+
+    if (existing) {
+      return existing.id;
+    }
+
+    const id =
+      `notification-${Date.now()}-${++this.sequence}`;
+
+    const notification: AppNotification = {
+      id,
+      type,
+      title,
+      message,
+      duration,
+      createdAt: Date.now(),
+    };
+
+    while (
+      this.items().length >= this.maxNotifications
+    ) {
+      this.dismiss(this.items()[0].id);
+    }
+
+    this.items.update(
+      items => [...items, notification]
+    );
+
+    if (duration > 0) {
+
+      const timer = setTimeout(
+        () => this.dismiss(id),
+        duration
+      );
+
+      this.timers.set(id, timer);
+
+    }
+
+    return id;
+
+  }
+
+  success(
+    message: string,
+    title = 'Success'
+  ): string {
+
+    return this.show(
+      'success', title, message, 4000
+    );
+
+  }
+
+  error(
+    message: string,
+    title = 'Error'
+  ): string {
+
+    return this.show(
+      'error', title, message, 7000
+    );
+
+  }
+
+  warning(
+    message: string,
+    title = 'Warning'
+  ): string {
+
+    return this.show(
+      'warning', title, message, 6000
+    );
+
+  }
+
+  info(
+    message: string,
+    title = 'Information'
+  ): string {
+
+    return this.show(
+      'info', title, message, 5000
+    );
+
+  }
+
+  dismiss(id: string): void {
+
+    const timer = this.timers.get(id);
+
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.timers.delete(id);
+    }
+
+    this.items.update(
+      items => items.filter(item => item.id !== id)
+    );
+
+  }
+
+  clear(): void {
+
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer);
+    }
+
+    this.timers.clear();
+    this.items.set([]);
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/core/config/api-endpoints.ts
+========================================
+import { environment } from '../../../environments/environment';
+
+const BASE = environment.apiBaseUrl;
+const MC = `${BASE}/api/multiclass`;
+const INC = `${MC}/incidents`;
+const PR = `${BASE}/api/persistent-responses`;
+const RES = `${BASE}/api/responses`;
+
+const id = (value: string) => encodeURIComponent(value);
+
+export const API_ENDPOINTS = {
+
+  health: `${BASE}/api/health`,
+  databaseHealth: `${BASE}/api/health/database`,
+
+  model: {
+    info: `${MC}/model-info`,
+    predict: `${MC}/predict`,
+    predictBatch: `${MC}/predict-batch`,
+    explain: `${MC}/explain`,
+  },
+
+  devices: {
+    list: `${BASE}/api/devices`,
+    create: `${BASE}/api/devices`,
+    profiles: `${MC}/device-profiles`,
+  },
+
+  risk: {
+    assess: `${MC}/assess-risk`,
+  },
+
+  incidents: {
+    info: `${INC}/info`,
+    list: INC,
+    summary: `${INC}/summary`,
+    detail: (value: string) => `${INC}/${id(value)}`,
+    audit: (value: string) => `${INC}/${id(value)}/audit`,
+    status: (value: string) => `${INC}/${id(value)}/status`,
+  },
+
+  persistentResponses: {
+    info: `${PR}/info`,
+    list: PR,
+    create: PR,
+    detail: (value: string) => `${PR}/${id(value)}`,
+    audit: (value: string) => `${PR}/${id(value)}/audit`,
+  },
+
+  responsePolicy: {
+    info: `${MC}/response-policy`,
+    plan: `${MC}/plan-response`,
+  },
+
+  simulation: {
+    info: `${RES}/info`,
+    create: RES,
+    detail: (value: string) => `${RES}/${id(value)}`,
+    audit: (value: string) => `${RES}/${id(value)}/audit`,
+  },
+
+  legacy: {
+    predictions: `${BASE}/api/predictions`,
+    incidents: `${BASE}/api/incidents`,
+    explain: `${BASE}/api/explain`,
+    csvUpload: `${BASE}/api/upload/csv`,
+    assistant: `${BASE}/api/assistant/chat`,
+    websocket: `${environment.websocketBaseUrl}/ws/predictions`,
+  },
+
+} as const;
+
+
+========================================
+FILE: frontend/src/app/core/config/http-context.ts
+========================================
+import { HttpContextToken } from '@angular/common/http';
+
+export const SKIP_GLOBAL_LOADING = new HttpContextToken<boolean>(() => false);
+
+export const SKIP_ERROR_NOTIFICATION = new HttpContextToken<boolean>(() => false);
+
+
+========================================
+FILE: frontend/src/app/core/interceptors/api.interceptor.ts
+========================================
+import { inject } from '@angular/core';
+
+import { HttpInterceptorFn } from '@angular/common/http';
+
+import { defer, finalize } from 'rxjs';
+
+import { environment } from '../../../environments/environment';
+
+import { LoadingService } from '../services/loading.service';
+
+import { SKIP_GLOBAL_LOADING } from '../config/http-context';
+
+export const apiInterceptor: HttpInterceptorFn = (request, next) => {
+  const backendUrl = environment.apiBaseUrl.replace(/\/+$/, '');
+
+  const isBackendRequest = request.url === backendUrl || request.url.startsWith(`${backendUrl}/`);
+
+  if (!isBackendRequest) {
+    return next(request);
+  }
+
+  const loading = inject(LoadingService);
+
+  const trackLoading = !request.context.get(SKIP_GLOBAL_LOADING);
+
+  return defer(() => {
+    if (trackLoading) {
+      loading.start();
+    }
+
+    return defer(() => next(request)).pipe(
+      finalize(() => {
+        if (trackLoading) {
+          loading.stop();
+        }
+      }),
+    );
+  });
+};
+
+
+========================================
+FILE: frontend/src/app/shared/utilities/api-error.ts
+========================================
+import {
+  HttpErrorResponse,
+} from '@angular/common/http';
+
+import { TimeoutError } from 'rxjs';
+
+export function getApiErrorMessage(
+  error: unknown
+): string {
+
+  if (error instanceof TimeoutError) {
+
+    return 'The request timed out. Check the operation status before retrying.';
+
+  }
+
+  if (!(error instanceof HttpErrorResponse)) {
+
+    return 'An unexpected application error occurred.';
+
+  }
+
+  switch (error.status) {
+
+    case 0:
+      return 'Unable to reach the backend. Check your connection and backend service.';
+
+    case 400:
+      return 'The request contains invalid data.';
+
+    case 401:
+      return 'Authentication is required.';
+
+    case 403:
+      return 'You are not authorized to perform this operation.';
+
+    case 404:
+      return 'The requested resource could not be found.';
+
+    case 409:
+      return 'The operation conflicts with the current resource state. Refresh and try again.';
+
+    case 413:
+      return 'The uploaded file exceeds the allowed size.';
+
+    case 422:
+      return 'Validation failed. Check the required input fields and values.';
+
+    case 429:
+      return 'Too many requests. Please try again later.';
+
+    case 500:
+      return 'An internal backend error occurred.';
+
+    case 502:
+    case 503:
+    case 504:
+      return 'The backend service is temporarily unavailable.';
+
+    default:
+      return `Request failed with HTTP status ${error.status}.`;
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/shared/components/device-context-selector/device-context-selector.ts
+========================================
+import {
+  Component,
+  OnInit,
+  inject,
+  input,
+} from '@angular/core';
+
+import { DecimalPipe } from '@angular/common';
+
+import {
+  DeviceContextService,
+} from '../../../core/services/device-context.service';
+
+@Component({
+  selector: 'app-device-context-selector',
+  standalone: true,
+  imports: [DecimalPipe],
+  templateUrl: './device-context-selector.html',
+  styleUrl: './device-context-selector.scss',
+})
+export class DeviceContextSelector implements OnInit {
+
+  protected readonly context =
+    inject(DeviceContextService);
+
+  readonly disabled = input(false);
+
+  ngOnInit(): void {
+
+    this.context.loadProfiles();
+
+  }
+
+  protected changeContext(event: Event): void {
+
+    if (this.disabled() || this.context.loading()) {
+      return;
+    }
+
+    const select = event.target as HTMLSelectElement;
+
+    const deviceId = select.value || null;
+
+    const accepted = this.context.selectDevice(deviceId);
+
+    if (!accepted) {
+
+      select.value =
+        this.context.selectedDeviceId() ?? '';
+
+    }
+
+  }
+
+  protected clearContext(): void {
+
+    if (!this.disabled() && !this.context.loading()) {
+
+      this.context.clearSelection();
+
+    }
+
+  }
+
+  protected refreshProfiles(): void {
+
+    if (!this.disabled() && !this.context.loading()) {
+
+      this.context.loadProfiles(true);
+
+    }
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/shared/components/risk-score/risk-score.ts
+========================================
+import {
+  Component,
+  computed,
+  input,
+} from '@angular/core';
+
+import { DecimalPipe } from '@angular/common';
+
+import {
+  RISK_LEVEL_LABELS,
+  type RiskAssessmentResponse,
+} from '../../../core/models/risk-assessment.model';
+
+
+@Component({
+  selector: 'app-risk-score',
+  standalone: true,
+  imports: [DecimalPipe],
+  templateUrl: './risk-score.html',
+  styleUrl: './risk-score.scss',
+})
+export class RiskScore {
+
+  readonly result =
+    input.required<RiskAssessmentResponse>();
+
+
+  protected readonly assessment = computed(
+    () => this.result().risk_assessment
+  );
+
+
+  protected readonly prediction = computed(
+    () => this.result().prediction
+  );
+
+
+  protected readonly context = computed(
+    () => this.assessment().device_context
+  );
+
+
+  protected readonly score = computed(
+    () => this.assessment().risk_score
+  );
+
+
+  protected readonly level = computed(
+    () => this.assessment().risk_level
+  );
+
+
+  protected readonly levelLabel = computed(
+    () => RISK_LEVEL_LABELS[this.level()]
+  );
+
+
+  protected readonly circumference =
+    2 * Math.PI * 54;
+
+
+  protected readonly gaugeOffset = computed(
+    () =>
+      this.circumference *
+      (1 - this.score() / 100)
+  );
+
+
+  protected readonly metrics = computed(() => {
+
+    const risk = this.assessment();
+
+    return [
+
+      {
+        label: 'Calibrated attack probability',
+        value: risk.attack_probability * 100,
+        precision: '1.2-4',
+        description: 'Binary calibrated probability',
+      },
+
+      {
+        label: 'Device criticality',
+        value: risk.risk_factors.criticality * 100,
+        precision: '1.0-2',
+        description: 'Business importance of the device',
+      },
+
+      {
+        label: 'Expected attack impact',
+        value: risk.risk_factors.attack_impact * 100,
+        precision: '1.0-2',
+        description: 'Conditional weighted attack impact',
+      },
+
+      {
+        label: 'Network exposure',
+        value: risk.risk_factors.exposure * 100,
+        precision: '1.0-2',
+        description: 'Device exposure to network threats',
+      },
+
+    ];
+
+  });
+
+
+  protected readonly classificationMismatch =
+    computed(() => {
+
+      return (
+        this.prediction().predicted_family === 'Benign' &&
+        this.assessment().attack_probability >= 0.50
+      );
+
+    });
+
+
+}
+
+
+========================================
+FILE: frontend/src/app/shared/components/risk-score/risk-score.html
+========================================
+<section
+  class="risk-panel"
+  [attr.data-level]="level()"
+  aria-labelledby="risk-score-heading"
+>
+
+  <!-- Component header -->
+
+  <header class="panel-header">
+
+    <div class="header-icon" aria-hidden="true">
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/>
+        <path d="M12 8v4"/>
+        <path d="M12 16h.01"/>
+      </svg>
+
+    </div>
+
+    <div class="header-copy">
+
+      <h2 id="risk-score-heading">
+        Context-Aware Risk Assessment
+      </h2>
+
+      <p>
+        Risk policy: {{ assessment().risk_policy_version }}
+      </p>
+
+    </div>
+
+    <span class="mode-label">
+      Assessment only
+    </span>
+
+  </header>
+
+
+  <!-- Main risk gauge -->
+
+  <div class="risk-overview">
+
+    <div class="overview-copy">
+
+      <span class="eyebrow">
+        Overall risk score
+      </span>
+
+      <div class="score-value">
+
+        {{ score() | number:'1.2-2' }}
+
+        <span>/ 100</span>
+
+      </div>
+
+      <span class="severity-label">
+
+        <span class="severity-dot"></span>
+
+        {{ levelLabel() }} Risk
+
+      </span>
+
+      <div class="context-details">
+
+        <div>
+          <span>Predicted family</span>
+          <strong>
+            {{ prediction().predicted_family }}
+          </strong>
+        </div>
+
+        <div>
+          <span>Device context</span>
+          <strong>
+            {{ context().device_name }}
+          </strong>
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="gauge-container">
+
+      <svg
+        class="risk-gauge"
+        viewBox="0 0 140 140"
+        role="img"
+        [attr.aria-label]="
+          levelLabel() + ' risk, ' +
+          (score() | number:'1.2-2') +
+          ' out of 100'
+        "
+      >
+
+        <circle
+          class="gauge-track"
+          cx="70"
+          cy="70"
+          r="54"
+        />
+
+        <circle
+          class="gauge-progress"
+          cx="70"
+          cy="70"
+          r="54"
+          [attr.stroke-dasharray]="circumference"
+          [attr.stroke-dashoffset]="gaugeOffset()"
+          transform="rotate(-90 70 70)"
+        />
+
+        <text
+          class="gauge-number"
+          x="70"
+          y="70"
+          text-anchor="middle"
+        >
+          {{ score() | number:'1.1-1' }}
+        </text>
+
+        <text
+          class="gauge-label"
+          x="70"
+          y="89"
+          text-anchor="middle"
+        >
+          {{ levelLabel() }}
+        </text>
+
+      </svg>
+
+    </div>
+
+  </div>
+
+
+  <!-- Risk factor metrics -->
+
+  <div class="metrics-grid">
+
+    @for (metric of metrics(); track metric.label) {
+
+      <article class="metric-card">
+
+        <span class="metric-label">
+          {{ metric.label }}
+        </span>
+
+        <strong class="metric-value">
+          {{ metric.value | number:metric.precision }}%
+        </strong>
+
+        <div class="metric-track" aria-hidden="true">
+
+          <div
+            class="metric-fill"
+            [style.width.%]="metric.value"
+          ></div>
+
+        </div>
+
+        <p>{{ metric.description }}</p>
+
+      </article>
+
+    }
+
+  </div>
+
+
+  <!-- Severity reference -->
+
+  <div class="severity-scale">
+
+    <h3>Risk severity scale</h3>
+
+    <div class="scale-grid">
+
+      <div class="scale-item low">
+        <span class="scale-bar"></span>
+        <strong>Low</strong>
+        <small>0 to &lt;25</small>
+      </div>
+
+      <div class="scale-item medium">
+        <span class="scale-bar"></span>
+        <strong>Medium</strong>
+        <small>25 to &lt;50</small>
+      </div>
+
+      <div class="scale-item high">
+        <span class="scale-bar"></span>
+        <strong>High</strong>
+        <small>50 to &lt;75</small>
+      </div>
+
+      <div class="scale-item critical">
+        <span class="scale-bar"></span>
+        <strong>Critical</strong>
+        <small>75 to 100</small>
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- Classification and risk distinction -->
+
+  @if (classificationMismatch()) {
+
+    <div class="warning-panel" role="status">
+
+      <strong>
+        Classification and risk differ
+      </strong>
+
+      <p>
+        Benign is the most probable individual class,
+        but the calibrated probability of malicious
+        traffic is at least 50%. Review the complete
+        probability distribution and risk assessment.
+      </p>
+
+    </div>
+
+  }
+
+
+  <!-- Unknown-device fallback -->
+
+  @if (!context().context_known) {
+
+    <div class="warning-panel">
+
+      <strong>Unknown device context</strong>
+
+      <p>
+        The assessment uses fallback device
+        criticality and exposure values.
+        Device identity remains unverified.
+      </p>
+
+    </div>
+
+  }
+
+
+  <!-- Safety information -->
+
+  <footer class="safety-footer">
+
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/>
+      <path d="m9 12 2 2 4-4"/>
+    </svg>
+
+    <div>
+
+      <strong>Assessment-only operation</strong>
+
+      <p>
+        Device identity is unverified.
+        Containment is not authorized.
+        No incident or response action was executed.
+      </p>
+
+    </div>
+
+  </footer>
+
+</section>
+
+
+========================================
+FILE: frontend/src/app/shared/components/risk-score/risk-score.scss
+========================================
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.risk-panel {
+  --risk-color: #22c55e;
+  display: grid;
+  gap: 18px;
+  padding: clamp(14px, 2vw, 22px);
+  background: #0f1929;
+  border: 1px solid #26364c;
+  border-radius: 16px;
+  color: #e2e8f0;
+}
+
+.risk-panel[data-level='medium'] {
+  --risk-color: #eab308;
+}
+
+.risk-panel[data-level='high'] {
+  --risk-color: #fb923c;
+}
+
+.risk-panel[data-level='critical'] {
+  --risk-color: #f87171;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.header-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: #172e47;
+  color: #60a5fa;
+}
+
+.header-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.header-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-copy h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.header-copy p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+  overflow-wrap: anywhere;
+}
+
+.mode-label {
+  padding: 6px 10px;
+  border: 1px solid #334155;
+  border-radius: 7px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.risk-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  align-items: center;
+  gap: 18px;
+  padding: clamp(14px, 2vw, 22px);
+  background: #142033;
+  border: 1px solid #26364c;
+  border-radius: 13px;
+}
+
+.overview-copy {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.eyebrow {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.score-value {
+  color: var(--risk-color);
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 750;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-value span {
+  font-size: 15px;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.severity-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--risk-color);
+}
+
+.severity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.context-details {
+  display: grid;
+  gap: 9px;
+  margin-top: 5px;
+  width: 100%;
+}
+
+.context-details div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  font-size: 12px;
+}
+
+.context-details span {
+  color: #94a3b8;
+}
+
+.context-details strong {
+  overflow-wrap: anywhere;
+}
+
+.gauge-container {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.risk-gauge {
+  display: block;
+  width: 100%;
+  max-width: 160px;
+  height: auto;
+}
+
+.gauge-track,
+.gauge-progress {
+  fill: none;
+  stroke-width: 10;
+}
+
+.gauge-track {
+  stroke: #2b3a50;
+}
+
+.gauge-progress {
+  stroke: var(--risk-color);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 350ms ease;
+}
+
+.gauge-number {
+  fill: #f1f5f9;
+  font-size: 27px;
+  font-weight: 700;
+}
+
+.gauge-label {
+  fill: var(--risk-color);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-card,
+.severity-scale {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid #26364c;
+  border-radius: 12px;
+  background: #142033;
+}
+
+.metric-card {
+  display: grid;
+  gap: 9px;
+}
+
+.metric-label,
+.metric-card p {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 650;
+  color: #f1f5f9;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-card p {
+  margin: 0;
+}
+
+.metric-track {
+  height: 6px;
+  background: #29384d;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.metric-fill {
+  height: 100%;
+  background: #60a5fa;
+  border-radius: inherit;
+  transition: width 350ms ease;
+}
+
+.severity-scale h3 {
+  margin: 0 0 13px;
+  font-size: 13px;
+}
+
+.scale-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.scale-item {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.scale-item.low { color: #22c55e; }
+.scale-item.medium { color: #eab308; }
+.scale-item.high { color: #fb923c; }
+.scale-item.critical { color: #f87171; }
+
+.scale-bar {
+  height: 7px;
+  border-radius: 4px;
+  background: currentColor;
+}
+
+.scale-item small {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.warning-panel,
+.safety-footer {
+  padding: 13px;
+  border: 1px solid #594a2c;
+  border-radius: 10px;
+  background: #211e1b;
+  color: #fbbf24;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.warning-panel p,
+.safety-footer p {
+  margin: 5px 0 0;
+  color: #cbd5e1;
+}
+
+.safety-footer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.safety-footer svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .risk-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gauge-container {
+    grid-row: 1;
+  }
+
+  .risk-gauge {
+    max-width: 135px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .header-copy h2 {
+    font-size: 16px;
+  }
+
+  .scale-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gauge-progress,
+  .metric-fill {
+    transition: none;
+  }
+}
+
+
+========================================
+FILE: frontend/src/app/shared/components/risk-contributions/risk-contributions.ts
+========================================
+import {
+  Component,
+  computed,
+  input,
+} from '@angular/core';
+
+import { DecimalPipe } from '@angular/common';
+
+import type {
+  RiskAssessmentResponse,
+} from '../../../core/models/risk-assessment.model';
+
+
+@Component({
+  selector: 'app-risk-contributions',
+  standalone: true,
+  imports: [DecimalPipe],
+  templateUrl: './risk-contributions.html',
+  styleUrl: './risk-contributions.scss',
+})
+export class RiskContributions {
+
+  readonly result =
+    input.required<RiskAssessmentResponse>();
+
+
+  protected readonly assessment = computed(
+    () => this.result().risk_assessment
+  );
+
+
+  protected readonly prediction = computed(
+    () => this.result().prediction
+  );
+
+
+  protected readonly score = computed(
+    () => this.assessment().risk_score
+  );
+
+
+  protected readonly reconstruction = computed(
+    () => this.assessment().risk_reconstruction
+  );
+
+
+  protected readonly contributions = computed(() => {
+
+    const risk = this.assessment();
+
+    const definitions = [
+
+      {
+        key: 'criticality',
+        label: 'Device criticality',
+        description:
+          'Business importance of the selected device',
+        color: '#60a5fa',
+      },
+
+      {
+        key: 'attack_impact',
+        label: 'Expected attack impact',
+        description:
+          'Conditional probability-weighted attack impact',
+        color: '#a78bfa',
+      },
+
+      {
+        key: 'exposure',
+        label: 'Network exposure',
+        description:
+          'Exposure of the device to network threats',
+        color: '#2dd4bf',
+      },
+
+    ] as const;
+
+    return definitions.map(definition => {
+
+      const key = definition.key;
+
+      const factor = risk.risk_factors[key];
+
+      const weight = risk.risk_weights[key];
+
+      const points = risk.risk_contributions[key];
+
+      const share = risk.risk_score > 0
+        ? (points / risk.risk_score) * 100
+        : 0;
+
+      return {
+
+        ...definition,
+
+        factor,
+
+        weight,
+
+        points,
+
+        share,
+
+      };
+
+    });
+
+  });
+
+
+  protected readonly contributionSum = computed(
+    () => this.contributions().reduce(
+      (sum, item) => sum + item.points,
+      0,
+    )
+  );
+
+
+  protected readonly dominantContribution = computed(() => {
+
+    const rows = this.contributions();
+
+    const maximum = Math.max(
+      ...rows.map(row => row.points)
+    );
+
+    if (maximum <= 0) {
+      return 'None';
+    }
+
+    return rows
+      .filter(row =>
+        Math.abs(row.points - maximum) <= 1e-6
+      )
+      .map(row => row.label)
+      .join(' and ');
+
+  });
+
+
+  protected readonly reconstructionVerified = computed(
+    () => {
+
+      return (
+        this.reconstruction().passed === true &&
+        Math.abs(
+          this.contributionSum() - this.score()
+        ) <= 1e-6
+      );
+
+    }
+  );
+
+
+  protected readonly unusedRiskCapacity = computed(
+    () => Math.max(0, 100 - this.contributionSum())
+  );
+
+
+}
+
+
+========================================
+FILE: frontend/src/app/shared/components/risk-contributions/risk-contributions.html
+========================================
+<section class="contribution-panel">
+
+  <!-- Header -->
+
+  <header class="panel-header">
+
+    <div class="header-icon" aria-hidden="true">
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M3 3v18h18"/>
+        <path d="M8 16v-3"/>
+        <path d="M13 16V8"/>
+        <path d="M18 16V4"/>
+      </svg>
+
+    </div>
+
+    <div class="header-copy">
+
+      <h2>Risk Contribution Analysis</h2>
+
+      <p>
+        Understand the factors contributing
+        to the overall risk score.
+      </p>
+
+    </div>
+
+  </header>
+
+
+  <!-- Context summary -->
+
+  <div class="summary-grid">
+
+    <article class="summary-card">
+
+      <span>Predicted family</span>
+
+      <strong>
+        {{ prediction().predicted_family }}
+      </strong>
+
+    </article>
+
+    <article class="summary-card">
+
+      <span>Device context</span>
+
+      <strong>
+        {{ assessment().device_context.device_name }}
+      </strong>
+
+    </article>
+
+    <article class="summary-card">
+
+      <span>Overall risk score</span>
+
+      <strong>
+        {{ score() | number:'1.2-4' }} / 100
+      </strong>
+
+    </article>
+
+  </div>
+
+
+  <!-- Combined contribution visualization -->
+
+  <div class="combined-panel">
+
+    <h3>Combined risk contributions</h3>
+
+    <p>
+      Each segment represents its contribution
+      in risk points on the 0 to 100 scale.
+    </p>
+
+    <div
+      class="stacked-bar"
+      aria-hidden="true"
+    >
+
+      @for (item of contributions(); track item.key) {
+
+        <div
+          class="stacked-segment"
+          [style.width.%]="item.points"
+          [style.background]="item.color"
+        ></div>
+
+      }
+
+    </div>
+
+    <div class="axis-labels" aria-hidden="true">
+
+      <span>0</span>
+      <span>25</span>
+      <span>50</span>
+      <span>75</span>
+      <span>100</span>
+
+    </div>
+
+    <div class="legend">
+
+      @for (item of contributions(); track item.key) {
+
+        <div class="legend-item">
+
+          <span
+            class="legend-dot"
+            [style.background]="item.color"
+          ></span>
+
+          <span>{{ item.label }}</span>
+
+        </div>
+
+      }
+
+      <div class="legend-item">
+
+        <span class="legend-dot remaining"></span>
+
+        <span>
+          Remaining scale:
+          {{ unusedRiskCapacity() | number:'1.2-2' }}
+          pts
+        </span>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- Individual contribution cards -->
+
+  <div class="factor-grid">
+
+    @for (item of contributions(); track item.key) {
+
+      <article
+        class="factor-card"
+        [style.--factor-color]="item.color"
+      >
+
+        <div class="factor-header">
+
+          <div class="factor-title">
+
+            <span class="factor-dot"></span>
+
+            <h3>{{ item.label }}</h3>
+
+          </div>
+
+          <strong class="factor-points">
+
+            {{ item.points | number:'1.2-4' }}
+
+            <small>pts</small>
+
+          </strong>
+
+        </div>
+
+        <p class="factor-description">
+          {{ item.description }}
+        </p>
+
+        <div class="factor-track" aria-hidden="true">
+
+          <div
+            class="factor-fill"
+            [style.width.%]="item.points"
+          ></div>
+
+        </div>
+
+        <div class="factor-metrics">
+
+          <div>
+
+            <span>Factor value</span>
+
+            <strong>
+              {{ item.factor * 100 | number:'1.0-2' }}%
+            </strong>
+
+          </div>
+
+          <div>
+
+            <span>Policy weight</span>
+
+            <strong>
+              {{ item.weight * 100 | number:'1.0-2' }}%
+            </strong>
+
+          </div>
+
+          <div>
+
+            <span>Share of total risk</span>
+
+            <strong>
+              {{ item.share | number:'1.2-2' }}%
+            </strong>
+
+          </div>
+
+        </div>
+
+        <div class="formula">
+
+          <span>Contribution calculation</span>
+
+          <code>
+
+            100 &times;
+            {{ assessment().attack_probability | number:'1.4-8' }}
+            &times;
+            {{ item.weight | number:'1.2-2' }}
+            &times;
+            {{ item.factor | number:'1.2-6' }}
+
+          </code>
+
+          <strong>
+            = {{ item.points | number:'1.2-4' }} pts
+          </strong>
+
+        </div>
+
+      </article>
+
+    }
+
+  </div>
+
+
+  <!-- Risk interpretation -->
+
+  <div class="interpretation-panel">
+
+    <h3>Largest risk contribution</h3>
+
+    <strong>{{ dominantContribution() }}</strong>
+
+    <p>
+      This identifies the largest contribution
+      under the current risk policy. It does not
+      establish the cause of the attack.
+    </p>
+
+  </div>
+
+
+  <!-- Mathematical reconstruction -->
+
+  <div
+    class="reconstruction-panel"
+    [class.verified]="reconstructionVerified()"
+    [class.failed]="!reconstructionVerified()"
+  >
+
+    <h3>Risk score reconstruction</h3>
+
+    <div class="reconstruction-row">
+
+      <span>Sum of contributions</span>
+
+      <strong>
+        {{ contributionSum() | number:'1.4-6' }}
+      </strong>
+
+    </div>
+
+    <div class="reconstruction-row">
+
+      <span>Backend risk score</span>
+
+      <strong>
+        {{ score() | number:'1.4-6' }}
+      </strong>
+
+    </div>
+
+    <div class="reconstruction-row">
+
+      <span>Backend reconstruction error</span>
+
+      <strong>
+        {{ reconstruction().error.toExponential(3) }}
+      </strong>
+
+    </div>
+
+    @if (reconstructionVerified()) {
+
+      <div class="verification-message">
+
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9"/>
+          <path d="m8 12 3 3 5-6"/>
+        </svg>
+
+        <span>
+          Mathematical reconstruction verified
+        </span>
+
+      </div>
+
+    } @else {
+
+      <div class="verification-message" role="alert">
+
+        Risk score reconstruction is inconsistent.
+
+      </div>
+
+    }
+
+  </div>
+
+
+  <footer class="panel-footer">
+
+    Contributions explain the configured risk policy.
+    They are not SHAP feature attributions or
+    causal explanations of the detected attack.
+    Displayed calculations may contain rounding.
+
+  </footer>
+
+</section>
+
+
+========================================
+FILE: frontend/src/app/shared/components/risk-contributions/risk-contributions.scss
+========================================
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.contribution-panel {
+  display: grid;
+  gap: 16px;
+  padding: clamp(14px, 2vw, 22px);
+  border: 1px solid #26364c;
+  border-radius: 16px;
+  background: #0f1929;
+  color: #e2e8f0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: #172e47;
+  color: #60a5fa;
+}
+
+.header-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.header-copy {
+  min-width: 0;
+}
+
+.header-copy h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 650;
+}
+
+.header-copy p,
+.combined-panel p,
+.interpretation-panel p {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #94a3b8;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-card,
+.combined-panel,
+.factor-card,
+.interpretation-panel,
+.reconstruction-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #26364c;
+  border-radius: 12px;
+  background: #142033;
+}
+
+.summary-card {
+  display: grid;
+  gap: 8px;
+}
+
+.summary-card span,
+.factor-metrics span {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.summary-card strong {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.stacked-bar {
+  display: flex;
+  height: 23px;
+  margin-top: 18px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #29384d;
+}
+
+.stacked-segment {
+  flex-shrink: 0;
+  height: 100%;
+  transition: width 300ms ease;
+}
+
+.axis-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.legend-dot,
+.factor-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legend-dot.remaining {
+  background: #29384d;
+  border: 1px solid #64748b;
+}
+
+.factor-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.factor-card {
+  display: grid;
+  gap: 13px;
+}
+
+.factor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.factor-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.factor-dot {
+  background: var(--factor-color);
+}
+
+.factor-points {
+  color: var(--factor-color);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+.factor-points small {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.factor-description {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.factor-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #29384d;
+}
+
+.factor-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--factor-color);
+  transition: width 300ms ease;
+}
+
+.factor-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.factor-metrics div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.factor-metrics strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.formula {
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+  border-radius: 8px;
+  background: #0f1929;
+  font-size: 12px;
+}
+
+.formula span {
+  color: #94a3b8;
+}
+
+.formula code {
+  color: #cbd5e1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.formula strong {
+  color: var(--factor-color);
+}
+
+.interpretation-panel {
+  display: grid;
+  gap: 7px;
+}
+
+.interpretation-panel strong {
+  color: #60a5fa;
+  font-size: 15px;
+}
+
+.reconstruction-panel {
+  display: grid;
+  gap: 13px;
+}
+
+.reconstruction-panel.verified {
+  border-color: #24563f;
+}
+
+.reconstruction-panel.failed {
+  border-color: #7f1d1d;
+}
+
+.reconstruction-row {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.reconstruction-row span {
+  color: #94a3b8;
+}
+
+.reconstruction-row strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.verification-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #334155;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.verified .verification-message {
+  color: #4ade80;
+}
+
+.failed .verification-message {
+  color: #f87171;
+}
+
+.verification-message svg {
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+}
+
+.panel-footer {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+@media (max-width: 700px) {
+  .summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .header-copy h2 {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 420px) {
+  .factor-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .factor-header {
+    align-items: flex-start;
+  }
+
+  .factor-points {
+    font-size: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stacked-segment,
+  .factor-fill {
+    transition: none;
+  }
+}
+
+
+========================================
+FILE: backend/app/context_risk_service.py
+========================================
+import math
+from numbers import Real
+
+from .device_context_service import (
+    get_device_context,
+)
+
+from .attack_impact_service import (
+    calculate_attack_impact,
+)
+
+from .multiclass_ml_service import (
+    predict_traffic,
+)
+
+
+RISK_POLICY_VERSION = "context_risk_v1"
+
+RISK_WEIGHTS = {
+
+    "criticality": 0.40,
+
+    "attack_impact": 0.40,
+
+    "exposure": 0.20,
+}
+
+
+# --------------------------------------------------
+# INPUT VALIDATION
+# --------------------------------------------------
+
+def validate_unit_value(
+    value,
+    name: str,
+) -> float:
+
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, Real)
+    ):
+
+        raise ValueError(
+            f"{name} must be numeric."
+        )
+
+    value = float(value)
+
+    if (
+        not math.isfinite(value)
+        or not 0 <= value <= 1
+    ):
+
+        raise ValueError(
+            f"{name} must be between 0 and 1."
+        )
+
+    return value
+
+
+# --------------------------------------------------
+# RISK SCORE
+# --------------------------------------------------
+
+def calculate_risk_score(
+
+    attack_probability: float,
+
+    criticality: float,
+
+    attack_impact: float,
+
+    exposure: float,
+
+) -> float:
+
+    probability = validate_unit_value(
+
+        attack_probability,
+
+        "attack_probability",
+    )
+
+    criticality = validate_unit_value(
+
+        criticality,
+
+        "criticality",
+    )
+
+    attack_impact = validate_unit_value(
+
+        attack_impact,
+
+        "attack_impact",
+    )
+
+    exposure = validate_unit_value(
+
+        exposure,
+
+        "exposure",
+    )
+
+    context_score = (
+
+        RISK_WEIGHTS["criticality"]
+        * criticality
+
+        + RISK_WEIGHTS["attack_impact"]
+        * attack_impact
+
+        + RISK_WEIGHTS["exposure"]
+        * exposure
+    )
+
+    risk_score = (
+
+        100 * probability * context_score
+    )
+
+    return float(risk_score)
+
+
+# --------------------------------------------------
+# SEVERITY CLASSIFICATION
+# --------------------------------------------------
+
+def get_risk_level(
+    risk_score: float,
+) -> str:
+
+    if risk_score < 25:
+
+        return "low"
+
+    if risk_score < 50:
+
+        return "medium"
+
+    if risk_score < 75:
+
+        return "high"
+
+    return "critical"
+
+
+# --------------------------------------------------
+# NON-DISRUPTIVE RECOMMENDATION
+# --------------------------------------------------
+
+def recommend_action(
+
+    risk_level: str,
+
+    detection_status: str,
+
+    context_known: bool,
+
+) -> str:
+
+    if risk_level == "critical":
+
+        return "priority_investigation"
+
+    if risk_level == "high":
+
+        return "alert_and_investigate"
+
+    # High attack confidence must not be ignored
+    # simply because the device has low criticality.
+
+    if detection_status == "high_confidence_attack":
+
+        return "alert_and_investigate"
+
+    if detection_status == "elevated_suspicion":
+
+        return "review_suspicious_activity"
+
+    if risk_level == "medium":
+
+        return "review_suspicious_activity"
+
+    if detection_status == "suspicious":
+
+        return "monitor_suspicious_activity"
+
+    if not context_known:
+
+        return "monitor_and_verify_device"
+
+    return "record_and_monitor"
+
+
+# --------------------------------------------------
+# CONTEXT-AWARE RISK ASSESSMENT
+# --------------------------------------------------
+
+def assess_prediction_risk(
+
+    prediction: dict,
+
+    device_id: str | None = None,
+
+) -> dict:
+
+    context = get_device_context(
+        device_id
+    )
+
+    impact_result = calculate_attack_impact(
+
+        prediction["class_probabilities"]
+    )
+
+    probability = validate_unit_value(
+
+        prediction["calibrated_attack_probability"],
+
+        "attack_probability",
+    )
+
+    criticality = context["criticality"]
+
+    exposure = context["exposure"]
+
+    attack_impact = impact_result[
+        "expected_impact"
+    ]
+
+    risk_score = calculate_risk_score(
+
+        attack_probability=probability,
+
+        criticality=criticality,
+
+        attack_impact=attack_impact,
+
+        exposure=exposure,
+    )
+
+    risk_level = get_risk_level(
+        risk_score
+    )
+
+    # Explain each factor's contribution
+    # to the final risk score.
+
+    criticality_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["criticality"]
+
+        * criticality
+    )
+
+    impact_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["attack_impact"]
+
+        * attack_impact
+    )
+
+    exposure_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["exposure"]
+
+        * exposure
+    )
+
+    contribution_sum = (
+
+        criticality_contribution
+
+        + impact_contribution
+
+        + exposure_contribution
+    )
+
+    recommendation = recommend_action(
+
+        risk_level=risk_level,
+
+        detection_status=prediction[
+            "detection_status"
+        ],
+
+        context_known=context[
+            "context_known"
+        ],
+    )
+
+    warnings = [
+
+        "Risk weights and thresholds are "
+        "provisional policy parameters.",
+
+        "Device context is demonstration-only.",
+
+        "Attack probability calibration "
+        "has not been independently evaluated.",
+    ]
+
+    if not context["context_known"]:
+
+        warnings.append(
+
+            "Unknown device: fallback criticality "
+            "and exposure were used."
+        )
+
+    if not impact_result["impact_available"]:
+
+        warnings.append(
+
+            "No meaningful raw attack-class "
+            "probability mass was available "
+            "for impact estimation."
+        )
+
+    if prediction["candidate_attack_family"] == "BruteForce":
+
+        warnings.append(
+
+            "BruteForce detection has no "
+            "independent validation coverage."
+        )
+
+    return {
+
+        "risk_policy_version":
+            RISK_POLICY_VERSION,
+
+        "risk_score":
+            risk_score,
+
+        "risk_level":
+            risk_level,
+
+        "attack_probability":
+            probability,
+
+        "device_context":
+            context,
+
+        "attack_impact":
+            impact_result,
+
+        "risk_factors": {
+
+            "criticality":
+                criticality,
+
+            "attack_impact":
+                attack_impact,
+
+            "exposure":
+                exposure,
+        },
+
+        "risk_weights":
+            RISK_WEIGHTS.copy(),
+
+        "risk_contributions": {
+
+            "criticality":
+                criticality_contribution,
+
+            "attack_impact":
+                impact_contribution,
+
+            "exposure":
+                exposure_contribution,
+        },
+
+        "risk_reconstruction": {
+
+            "contribution_sum":
+                contribution_sum,
+
+            "error":
+                abs(contribution_sum - risk_score),
+
+            "passed":
+                math.isclose(
+
+                    contribution_sum,
+
+                    risk_score,
+
+                    abs_tol=1e-8,
+
+                    rel_tol=0,
+                ),
+        },
+
+        "recommended_action":
+            recommendation,
+
+        "requires_device_verification":
+            not context["identity_verified"],
+
+        "containment_authorized":
+            False,
+
+        "response_executed":
+            False,
+
+        "warnings":
+            warnings,
+    }
+
+
+# --------------------------------------------------
+# COMPLETE PREDICTION AND RISK PIPELINE
+# --------------------------------------------------
+
+def assess_traffic_risk(
+
+    features: dict,
+
+    device_id: str | None = None,
+
+) -> dict:
+
+    prediction = predict_traffic(
+        features
+    )
+
+    risk = assess_prediction_risk(
+
+        prediction=prediction,
+
+        device_id=device_id,
+    )
+
+    return {
+
+        "prediction": prediction,
+
+        "risk_assessment": risk,
+
+        "mode": "risk_assessment_only",
+
+        "incident_created": False,
+
+        "response_executed": False,
+    }
+
+========================================
+FILE: backend/app/attack_impact_service.py
+========================================
+import math
+from numbers import Real
+
+
+ATTACK_IMPACT = {
+
+    "DDoS": 0.90,
+
+    "DoS": 0.75,
+
+    "Reconnaissance": 0.40,
+
+    "BruteForce": 0.70,
+
+    "Spoofing": 0.80,
+
+    "Mirai": 0.95,
+
+    "WebBased": 0.85,
+}
+
+
+def calculate_attack_impact(
+    class_probabilities: dict,
+) -> dict:
+
+    if not isinstance(
+        class_probabilities, dict
+    ):
+
+        raise ValueError(
+            "Class probabilities must be a dictionary."
+        )
+
+    expected_classes = (
+        set(ATTACK_IMPACT) | {"Benign"}
+    )
+
+    if set(class_probabilities) != expected_classes:
+
+        raise ValueError(
+            "Unexpected class probability schema."
+        )
+
+    probabilities = {}
+
+    for family, value in class_probabilities.items():
+
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, Real)
+        ):
+
+            raise ValueError(
+                f"Invalid probability for {family}."
+            )
+
+        probability = float(value)
+
+        if (
+            not math.isfinite(probability)
+            or not 0 <= probability <= 1
+        ):
+
+            raise ValueError(
+                f"Invalid probability for {family}."
+            )
+
+        probabilities[family] = probability
+
+    if not math.isclose(
+        sum(probabilities.values()),
+        1.0,
+        abs_tol=1e-6,
+        rel_tol=0,
+    ):
+
+        raise ValueError(
+            "Class probabilities must sum to one."
+        )
+
+    raw_attack_probability = sum(
+
+        probabilities[family]
+
+        for family in ATTACK_IMPACT
+    )
+
+    contributions = []
+
+    if raw_attack_probability <= 1e-12:
+
+        return {
+
+            "expected_impact": 0.0,
+
+            "raw_attack_probability":
+                raw_attack_probability,
+
+            "impact_contributions": [],
+
+            "impact_available": False,
+
+            "impact_policy_version":
+                "attack_impact_v1",
+        }
+
+    expected_impact = 0.0
+
+    for family, impact in ATTACK_IMPACT.items():
+
+        conditional_probability = (
+
+            probabilities[family]
+
+            / raw_attack_probability
+        )
+
+        contribution = (
+
+            conditional_probability * impact
+        )
+
+        expected_impact += contribution
+
+        contributions.append({
+
+            "attack_family": family,
+
+            "class_probability":
+                probabilities[family],
+
+            "conditional_probability":
+                conditional_probability,
+
+            "impact_score": impact,
+
+            "weighted_contribution":
+                contribution,
+        })
+
+    contributions.sort(
+
+        key=lambda item:
+            item["weighted_contribution"],
+
+        reverse=True,
+    )
+
+    return {
+
+        "expected_impact":
+            float(expected_impact),
+
+        "raw_attack_probability":
+            raw_attack_probability,
+
+        "impact_contributions":
+            contributions,
+
+        "impact_available": True,
+
+        "impact_policy_version":
+            "attack_impact_v1",
+
+        "class_probabilities_calibrated":
+            False,
+    }
+
+========================================
+FILE: backend/app/device_context_service.py
+========================================
+from copy import deepcopy
+
+
+# --------------------------------------------------
+# DEMONSTRATION DEVICE INVENTORY
+# --------------------------------------------------
+
+DEVICE_PROFILES = {
+
+    "sensor-001": {
+
+        "device_id": "sensor-001",
+
+        "device_name": "Temperature Sensor",
+
+        "device_type": "sensor",
+
+        "criticality": 0.25,
+
+        "exposure": 0.30,
+
+        "business_function":
+            "Environmental monitoring",
+
+        "containment_allowed": True,
+    },
+
+    "camera-001": {
+
+        "device_id": "camera-001",
+
+        "device_name": "Security Camera",
+
+        "device_type": "camera",
+
+        "criticality": 0.70,
+
+        "exposure": 0.60,
+
+        "business_function":
+            "Physical security monitoring",
+
+        "containment_allowed": True,
+    },
+
+    "gateway-001": {
+
+        "device_id": "gateway-001",
+
+        "device_name": "IoT Gateway",
+
+        "device_type": "gateway",
+
+        "criticality": 0.90,
+
+        "exposure": 0.90,
+
+        "business_function":
+            "IoT network communication",
+
+        "containment_allowed": False,
+    },
+
+    "medical-001": {
+
+        "device_id": "medical-001",
+
+        "device_name": "Medical IoT Device",
+
+        "device_type": "medical",
+
+        "criticality": 1.00,
+
+        "exposure": 0.40,
+
+        "business_function":
+            "Patient monitoring",
+
+        "containment_allowed": False,
+    },
+
+    "industrial-001": {
+
+        "device_id": "industrial-001",
+
+        "device_name": "Industrial Controller",
+
+        "device_type": "industrial",
+
+        "criticality": 0.95,
+
+        "exposure": 0.50,
+
+        "business_function":
+            "Industrial process control",
+
+        "containment_allowed": False,
+    },
+}
+
+
+# --------------------------------------------------
+# UNKNOWN DEVICE FALLBACK
+# --------------------------------------------------
+
+UNKNOWN_DEVICE_PROFILE = {
+
+    "device_id": None,
+
+    "device_name": "Unknown Device",
+
+    "device_type": "unknown",
+
+    "criticality": 0.50,
+
+    "exposure": 0.50,
+
+    "business_function": "Unknown",
+
+    "containment_allowed": False,
+}
+
+
+# --------------------------------------------------
+# RETRIEVE DEVICE CONTEXT
+# --------------------------------------------------
+
+def get_device_context(
+    device_id: str | None = None,
+) -> dict:
+
+    if device_id is not None:
+
+        if not isinstance(device_id, str):
+
+            raise ValueError(
+                "device_id must be a string."
+            )
+
+        if not device_id.strip():
+
+            raise ValueError(
+                "device_id cannot be empty."
+            )
+
+    if device_id in DEVICE_PROFILES:
+
+        context = deepcopy(
+            DEVICE_PROFILES[device_id]
+        )
+
+        context.update({
+
+            "context_known": True,
+
+            "context_source":
+                "demonstration_inventory",
+
+            "identity_verified": False,
+
+            "simulation_only": True,
+        })
+
+        return context
+
+    context = deepcopy(
+        UNKNOWN_DEVICE_PROFILE
+    )
+
+    context.update({
+
+        "requested_device_id": device_id,
+
+        "context_known": False,
+
+        "context_source":
+            "unknown_device_fallback",
+
+        "identity_verified": False,
+
+        "simulation_only": True,
+    })
+
+    return context
+
+
+# --------------------------------------------------
+# LIST DEMONSTRATION DEVICES
+# --------------------------------------------------
+
+def list_device_profiles() -> list[dict]:
+
+    return [
+
+        get_device_context(device_id)
+
+        for device_id in DEVICE_PROFILES
+    ]
+
+========================================
+FILE: backend/app/multiclass_router.py
+========================================
+import logging
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field, ConfigDict
+from .multiclass_explainability_service import (
+    explain_prediction,
+)
+from .multiclass_ml_service import (
+    predict_traffic,
+    predict_batch,
+    get_model_info,
+)
+from .response_policy_service import (
+    plan_traffic_response,
+    get_response_policy_info,
+)
+from .context_risk_service import (
+    assess_traffic_risk,
+)
+
+from .device_context_service import (
+    list_device_profiles,
+)
+
+logger = logging.getLogger(__name__)
+
+
+router = APIRouter(
+    prefix="/api/multiclass",
+    tags=["Multiclass Intrusion Detection"],
+)
+
+
+MAX_BATCH_SIZE = 1000
+
+
+# --------------------------------------------------
+# REQUEST SCHEMAS
+# --------------------------------------------------
+
+class PredictionRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    # features: dict[str, float | int]
+    features: dict
+
+    source: str = Field(
+        default="manual",
+        max_length=100,
+    )
+
+
+class BatchPredictionRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    records: list[dict]
+
+    source: str = Field(
+        default="batch",
+        max_length=100,
+    )
+
+class ExplanationRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: dict
+
+    top_n: int = Field(
+        default=10,
+        ge=1,
+        le=36,
+        strict=True,
+    )
+
+    target_class: int | None = Field(
+        default=None,
+        ge=0,
+        le=7,
+        strict=True,
+    )
+
+    source: str = Field(
+        default="manual",
+        max_length=100,
+    )
+# --------------------------------------------------
+# MODEL INFORMATION
+# --------------------------------------------------
+
+@router.get("/model-info")
+def model_information():
+
+    return get_model_info()
+
+
+class RiskAssessmentRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: dict
+
+    device_id: str | None = Field(
+
+        default=None,
+
+        min_length=1,
+
+        max_length=100,
+
+        strict=True,
+    )
+
+    source: str = Field(
+
+        default="manual",
+
+        max_length=100,
+    )
+
+# --------------------------------------------------
+# SINGLE PREDICTION
+# --------------------------------------------------
+
+@router.post("/predict")
+def multiclass_prediction(
+    request: PredictionRequest,
+):
+
+    try:
+
+        result = predict_traffic(
+            request.features
+        )
+
+        return {
+            **result,
+            "source": request.source,
+            "incident_created": False,
+            "response_executed": False,
+            "mode": "prediction_only",
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass prediction failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Multiclass prediction failed.",
+        ) from error
+
+
+# --------------------------------------------------
+# BATCH PREDICTION
+# --------------------------------------------------
+
+@router.post("/predict-batch")
+def multiclass_batch_prediction(
+    request: BatchPredictionRequest,
+):
+
+    if not request.records:
+
+        raise HTTPException(
+            status_code=422,
+            detail="At least one record is required.",
+        )
+
+    if len(request.records) > MAX_BATCH_SIZE:
+
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Maximum batch size is "
+                f"{MAX_BATCH_SIZE} records."
+            ),
+        )
+
+    try:
+
+        predictions = predict_batch(
+            request.records
+        )
+
+        return {
+            "total_records": len(predictions),
+            "source": request.source,
+            "mode": "prediction_only",
+            "predictions": predictions,
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass batch prediction failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Batch prediction failed.",
+        ) from error
+
+# --------------------------------------------------
+# MULTICLASS SHAP EXPLANATION
+# --------------------------------------------------
+
+@router.post("/explain")
+def multiclass_explanation(
+    request: ExplanationRequest,
+):
+
+    try:
+
+        result = explain_prediction(
+
+            features=request.features,
+
+            top_n=request.top_n,
+
+            target_class=request.target_class,
+        )
+
+        return {
+
+            **result,
+
+            "source":
+                request.source,
+
+            "mode":
+                "explanation_only",
+
+            "incident_created":
+                False,
+
+            "response_executed":
+                False,
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail=str(error),
+
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass explanation failed."
+        )
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Multiclass explanation failed."
+            ),
+
+        ) from error
+
+# --------------------------------------------------
+# DEMONSTRATION DEVICE PROFILES
+# --------------------------------------------------
+
+@router.get("/device-profiles")
+def multiclass_device_profiles():
+
+    devices = list_device_profiles()
+
+    return {
+
+        "total_devices": len(devices),
+
+        "mode": "demonstration_only",
+
+        "devices": devices,
+    }
+
+
+# --------------------------------------------------
+# CONTEXT-AWARE RISK ASSESSMENT
+# --------------------------------------------------
+
+@router.post("/assess-risk")
+def multiclass_risk_assessment(
+
+    request: RiskAssessmentRequest,
+
+):
+
+    try:
+
+        result = assess_traffic_risk(
+
+            features=request.features,
+
+            device_id=request.device_id,
+        )
+
+        return {
+
+            **result,
+
+            "source": request.source,
+        }
+
+    except (ValueError, OverflowError) as error:
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail=str(error),
+
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+
+            "Context-aware risk assessment failed."
+        )
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail="Risk assessment failed.",
+
+        ) from error
+
+# --------------------------------------------------
+# RESPONSE POLICY INFORMATION
+# --------------------------------------------------
+
+@router.get("/response-policy")
+def response_policy_information():
+
+    return get_response_policy_info()
+
+
+# --------------------------------------------------
+# CONTROLLED RESPONSE PLANNING
+# --------------------------------------------------
+
+@router.post("/plan-response")
+def multiclass_response_planning(
+    request: RiskAssessmentRequest,
+):
+
+    try:
+
+        result = plan_traffic_response(
+            features=request.features,
+            device_id=request.device_id,
+        )
+
+        return {
+            **result,
+            "source": request.source,
+        }
+
+    except (ValueError, OverflowError) as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Controlled response planning failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Response planning failed.",
+        ) from error
+
+
+========================================
+FILE: frontend/angular.json
+========================================
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": {
+    "packageManager": "npm",
+    "analytics": "7c47c52e-45a1-448e-b929-a94215e27dde"
+  },
+  "newProjectRoot": "projects",
+  "projects": {
+    "frontend": {
+      "projectType": "application",
+      "schematics": {
+        "@schematics/angular:component": {
+          "style": "scss"
+        }
+      },
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.app.json",
+            "inlineStyleLanguage": "scss",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/styles.scss"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "frontend:build:production"
+            },
+            "development": {
+              "buildTarget": "frontend:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test"
+        }
+      }
+    }
+  }
+}
+
+
+========================================
+FILE: frontend/package.json
+========================================
+{
+  "name": "frontend",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test"
+  },
+  "private": true,
+  "packageManager": "npm@10.9.3",
+  "dependencies": {
+    "@angular/cdk": "^21.2.14",
+    "@angular/common": "^21.2.0",
+    "@angular/compiler": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@angular/forms": "^21.2.0",
+    "@angular/platform-browser": "^21.2.0",
+    "@angular/router": "^21.2.0",
+    "chart.js": "^4.6.1",
+    "ng2-charts": "^8.0.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^21.2.24",
+    "@angular/cli": "^21.2.24",
+    "@angular/compiler-cli": "^21.2.0",
+    "jsdom": "^28.0.0",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2",
+    "vitest": "^4.0.8"
+  }
+}
+

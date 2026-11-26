@@ -1,6 +1,33 @@
-import { Component, inject, output, signal } from '@angular/core';
+﻿import {
+  Component,
+  DestroyRef,
+  inject,
+  output,
+  signal,
+} from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
-import { Api, Device, DeviceCreate } from '../../services/api';
+import { HttpErrorResponse } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize } from 'rxjs';
+
+import {
+  DeviceApiService,
+} from '../../core/services/device-api.service';
+
+import {
+  NotificationService,
+} from '../../core/services/notification.service';
+
+import type {
+  Device,
+  DeviceCreate,
+  DeviceStatus,
+} from '../../core/models/device.model';
+
+import {
+  getApiErrorMessage,
+} from '../../shared/utilities/api-error';
 
 @Component({
   selector: 'app-device-form',
@@ -10,74 +37,159 @@ import { Api, Device, DeviceCreate } from '../../services/api';
   styleUrl: './device-form.scss',
 })
 export class DeviceForm {
-  private readonly api = inject(Api);
+
+  private readonly api = inject(DeviceApiService);
+
+  private readonly notifications =
+    inject(NotificationService);
+
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly deviceRegistered = output<Device>();
 
   protected readonly savingDevice = signal(false);
+
   protected readonly deviceMessage = signal('');
-  protected readonly deviceMessageType = signal<'success' | 'error'>('success');
+
+  protected readonly deviceMessageType =
+    signal<'success' | 'error'>('success');
 
   protected deviceName = '';
   protected deviceIdentifier = '';
   protected deviceType = 'temperature_sensor';
   protected deviceLocation = '';
-  protected deviceStatus: DeviceCreate['status'] = 'online';
+
+  protected deviceStatus: DeviceStatus = 'unknown';
 
   protected registerDevice(): void {
+
+    if (this.savingDevice()) {
+      return;
+    }
+
     this.deviceMessage.set('');
 
     const device: DeviceCreate = {
+
       device_name: this.deviceName.trim(),
+
       device_identifier: this.deviceIdentifier.trim(),
+
       device_type: this.deviceType.trim(),
-      location: this.deviceLocation.trim(),
+
+      location: this.deviceLocation.trim() || null,
+
       status: this.deviceStatus,
+
     };
 
-    if (!device.device_name || !device.device_identifier || !device.device_type) {
+    if (
+      !device.device_name ||
+      !device.device_identifier ||
+      !device.device_type
+    ) {
+
       this.showError('Please complete all required fields.');
+
       return;
+
+    }
+
+    if (
+      device.device_name.length > 150 ||
+      device.device_identifier.length > 200 ||
+      device.device_type.length > 100 ||
+      (device.location?.length ?? 0) > 200
+    ) {
+
+      this.showError('One or more fields exceed the permitted length.');
+
+      return;
+
+    }
+
+    const allowedStatuses: DeviceStatus[] = [
+      'online',
+      'offline',
+      'unknown',
+      'quarantined',
+    ];
+
+    if (!allowedStatuses.includes(device.status)) {
+
+      this.showError('Invalid device status.');
+
+      return;
+
     }
 
     this.savingDevice.set(true);
 
-    this.api.createDevice(device).subscribe({
-      next: (createdDevice) => {
+    this.api.registerDevice(device).pipe(
+
+      takeUntilDestroyed(this.destroyRef),
+
+      finalize(() => this.savingDevice.set(false))
+
+    ).subscribe({
+
+      next: createdDevice => {
+
         this.deviceMessageType.set('success');
-        this.deviceMessage.set(`Device "${createdDevice.device_name}" registered successfully.`);
+
+        this.deviceMessage.set(
+          `Device "${createdDevice.device_name}" registered successfully.`
+        );
+
+        this.notifications.success(
+          'Device added to the registered inventory.',
+          'Device registered'
+        );
 
         this.resetForm();
-        this.savingDevice.set(false);
 
-        // Notify Dashboard that a device was registered.
         this.deviceRegistered.emit(createdDevice);
+
       },
 
-      error: (error) => {
-        if (error.status === 409) {
-          this.showError('That device identifier already exists. Please use a unique identifier.');
-        } else if (error.status === 422) {
-          this.showError('The server rejected the device details. Check the required fields.');
+      error: error => {
+
+        if (
+          error instanceof HttpErrorResponse &&
+          error.status === 409
+        ) {
+
+          this.showError(
+            'This device identifier already exists.'
+          );
+
         } else {
-          this.showError('Could not register the device. Check the backend and try again.');
+
+          this.showError(getApiErrorMessage(error));
+
         }
 
-        this.savingDevice.set(false);
       },
+
     });
+
   }
 
   private showError(message: string): void {
+
     this.deviceMessageType.set('error');
     this.deviceMessage.set(message);
+
   }
 
   private resetForm(): void {
+
     this.deviceName = '';
     this.deviceIdentifier = '';
     this.deviceType = 'temperature_sensor';
     this.deviceLocation = '';
-    this.deviceStatus = 'online';
+    this.deviceStatus = 'unknown';
+
   }
+
 }

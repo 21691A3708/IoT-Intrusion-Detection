@@ -1,0 +1,2842 @@
+﻿
+========================================
+FILE: backend/app/context_risk_service.py
+========================================
+import math
+from numbers import Real
+
+from .device_context_service import (
+    get_device_context,
+)
+
+from .attack_impact_service import (
+    calculate_attack_impact,
+)
+
+from .multiclass_ml_service import (
+    predict_traffic,
+)
+
+
+RISK_POLICY_VERSION = "context_risk_v1"
+
+RISK_WEIGHTS = {
+
+    "criticality": 0.40,
+
+    "attack_impact": 0.40,
+
+    "exposure": 0.20,
+}
+
+
+# --------------------------------------------------
+# INPUT VALIDATION
+# --------------------------------------------------
+
+def validate_unit_value(
+    value,
+    name: str,
+) -> float:
+
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, Real)
+    ):
+
+        raise ValueError(
+            f"{name} must be numeric."
+        )
+
+    value = float(value)
+
+    if (
+        not math.isfinite(value)
+        or not 0 <= value <= 1
+    ):
+
+        raise ValueError(
+            f"{name} must be between 0 and 1."
+        )
+
+    return value
+
+
+# --------------------------------------------------
+# RISK SCORE
+# --------------------------------------------------
+
+def calculate_risk_score(
+
+    attack_probability: float,
+
+    criticality: float,
+
+    attack_impact: float,
+
+    exposure: float,
+
+) -> float:
+
+    probability = validate_unit_value(
+
+        attack_probability,
+
+        "attack_probability",
+    )
+
+    criticality = validate_unit_value(
+
+        criticality,
+
+        "criticality",
+    )
+
+    attack_impact = validate_unit_value(
+
+        attack_impact,
+
+        "attack_impact",
+    )
+
+    exposure = validate_unit_value(
+
+        exposure,
+
+        "exposure",
+    )
+
+    context_score = (
+
+        RISK_WEIGHTS["criticality"]
+        * criticality
+
+        + RISK_WEIGHTS["attack_impact"]
+        * attack_impact
+
+        + RISK_WEIGHTS["exposure"]
+        * exposure
+    )
+
+    risk_score = (
+
+        100 * probability * context_score
+    )
+
+    return float(risk_score)
+
+
+# --------------------------------------------------
+# SEVERITY CLASSIFICATION
+# --------------------------------------------------
+
+def get_risk_level(
+    risk_score: float,
+) -> str:
+
+    if risk_score < 25:
+
+        return "low"
+
+    if risk_score < 50:
+
+        return "medium"
+
+    if risk_score < 75:
+
+        return "high"
+
+    return "critical"
+
+
+# --------------------------------------------------
+# NON-DISRUPTIVE RECOMMENDATION
+# --------------------------------------------------
+
+def recommend_action(
+
+    risk_level: str,
+
+    detection_status: str,
+
+    context_known: bool,
+
+) -> str:
+
+    if risk_level == "critical":
+
+        return "priority_investigation"
+
+    if risk_level == "high":
+
+        return "alert_and_investigate"
+
+    # High attack confidence must not be ignored
+    # simply because the device has low criticality.
+
+    if detection_status == "high_confidence_attack":
+
+        return "alert_and_investigate"
+
+    if detection_status == "elevated_suspicion":
+
+        return "review_suspicious_activity"
+
+    if risk_level == "medium":
+
+        return "review_suspicious_activity"
+
+    if detection_status == "suspicious":
+
+        return "monitor_suspicious_activity"
+
+    if not context_known:
+
+        return "monitor_and_verify_device"
+
+    return "record_and_monitor"
+
+
+# --------------------------------------------------
+# CONTEXT-AWARE RISK ASSESSMENT
+# --------------------------------------------------
+
+def assess_prediction_risk(
+
+    prediction: dict,
+
+    device_id: str | None = None,
+
+) -> dict:
+
+    context = get_device_context(
+        device_id
+    )
+
+    impact_result = calculate_attack_impact(
+
+        prediction["class_probabilities"]
+    )
+
+    probability = validate_unit_value(
+
+        prediction["calibrated_attack_probability"],
+
+        "attack_probability",
+    )
+
+    criticality = context["criticality"]
+
+    exposure = context["exposure"]
+
+    attack_impact = impact_result[
+        "expected_impact"
+    ]
+
+    risk_score = calculate_risk_score(
+
+        attack_probability=probability,
+
+        criticality=criticality,
+
+        attack_impact=attack_impact,
+
+        exposure=exposure,
+    )
+
+    risk_level = get_risk_level(
+        risk_score
+    )
+
+    # Explain each factor's contribution
+    # to the final risk score.
+
+    criticality_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["criticality"]
+
+        * criticality
+    )
+
+    impact_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["attack_impact"]
+
+        * attack_impact
+    )
+
+    exposure_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["exposure"]
+
+        * exposure
+    )
+
+    contribution_sum = (
+
+        criticality_contribution
+
+        + impact_contribution
+
+        + exposure_contribution
+    )
+
+    recommendation = recommend_action(
+
+        risk_level=risk_level,
+
+        detection_status=prediction[
+            "detection_status"
+        ],
+
+        context_known=context[
+            "context_known"
+        ],
+    )
+
+    warnings = [
+
+        "Risk weights and thresholds are "
+        "provisional policy parameters.",
+
+        "Device context is demonstration-only.",
+
+        "Attack probability calibration "
+        "has not been independently evaluated.",
+    ]
+
+    if not context["context_known"]:
+
+        warnings.append(
+
+            "Unknown device: fallback criticality "
+            "and exposure were used."
+        )
+
+    if not impact_result["impact_available"]:
+
+        warnings.append(
+
+            "No meaningful raw attack-class "
+            "probability mass was available "
+            "for impact estimation."
+        )
+
+    if prediction["candidate_attack_family"] == "BruteForce":
+
+        warnings.append(
+
+            "BruteForce detection has no "
+            "independent validation coverage."
+        )
+
+    return {
+
+        "risk_policy_version":
+            RISK_POLICY_VERSION,
+
+        "risk_score":
+            risk_score,
+
+        "risk_level":
+            risk_level,
+
+        "attack_probability":
+            probability,
+
+        "device_context":
+            context,
+
+        "attack_impact":
+            impact_result,
+
+        "risk_factors": {
+
+            "criticality":
+                criticality,
+
+            "attack_impact":
+                attack_impact,
+
+            "exposure":
+                exposure,
+        },
+
+        "risk_weights":
+            RISK_WEIGHTS.copy(),
+
+        "risk_contributions": {
+
+            "criticality":
+                criticality_contribution,
+
+            "attack_impact":
+                impact_contribution,
+
+            "exposure":
+                exposure_contribution,
+        },
+
+        "risk_reconstruction": {
+
+            "contribution_sum":
+                contribution_sum,
+
+            "error":
+                abs(contribution_sum - risk_score),
+
+            "passed":
+                math.isclose(
+
+                    contribution_sum,
+
+                    risk_score,
+
+                    abs_tol=1e-8,
+
+                    rel_tol=0,
+                ),
+        },
+
+        "recommended_action":
+            recommendation,
+
+        "requires_device_verification":
+            not context["identity_verified"],
+
+        "containment_authorized":
+            False,
+
+        "response_executed":
+            False,
+
+        "warnings":
+            warnings,
+    }
+
+
+# --------------------------------------------------
+# COMPLETE PREDICTION AND RISK PIPELINE
+# --------------------------------------------------
+
+def assess_traffic_risk(
+
+    features: dict,
+
+    device_id: str | None = None,
+
+) -> dict:
+
+    prediction = predict_traffic(
+        features
+    )
+
+    risk = assess_prediction_risk(
+
+        prediction=prediction,
+
+        device_id=device_id,
+    )
+
+    return {
+
+        "prediction": prediction,
+
+        "risk_assessment": risk,
+
+        "mode": "risk_assessment_only",
+
+        "incident_created": False,
+
+        "response_executed": False,
+    }
+
+========================================
+FILE: backend/app/attack_impact_service.py
+========================================
+import math
+from numbers import Real
+
+
+ATTACK_IMPACT = {
+
+    "DDoS": 0.90,
+
+    "DoS": 0.75,
+
+    "Reconnaissance": 0.40,
+
+    "BruteForce": 0.70,
+
+    "Spoofing": 0.80,
+
+    "Mirai": 0.95,
+
+    "WebBased": 0.85,
+}
+
+
+def calculate_attack_impact(
+    class_probabilities: dict,
+) -> dict:
+
+    if not isinstance(
+        class_probabilities, dict
+    ):
+
+        raise ValueError(
+            "Class probabilities must be a dictionary."
+        )
+
+    expected_classes = (
+        set(ATTACK_IMPACT) | {"Benign"}
+    )
+
+    if set(class_probabilities) != expected_classes:
+
+        raise ValueError(
+            "Unexpected class probability schema."
+        )
+
+    probabilities = {}
+
+    for family, value in class_probabilities.items():
+
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, Real)
+        ):
+
+            raise ValueError(
+                f"Invalid probability for {family}."
+            )
+
+        probability = float(value)
+
+        if (
+            not math.isfinite(probability)
+            or not 0 <= probability <= 1
+        ):
+
+            raise ValueError(
+                f"Invalid probability for {family}."
+            )
+
+        probabilities[family] = probability
+
+    if not math.isclose(
+        sum(probabilities.values()),
+        1.0,
+        abs_tol=1e-6,
+        rel_tol=0,
+    ):
+
+        raise ValueError(
+            "Class probabilities must sum to one."
+        )
+
+    raw_attack_probability = sum(
+
+        probabilities[family]
+
+        for family in ATTACK_IMPACT
+    )
+
+    contributions = []
+
+    if raw_attack_probability <= 1e-12:
+
+        return {
+
+            "expected_impact": 0.0,
+
+            "raw_attack_probability":
+                raw_attack_probability,
+
+            "impact_contributions": [],
+
+            "impact_available": False,
+
+            "impact_policy_version":
+                "attack_impact_v1",
+        }
+
+    expected_impact = 0.0
+
+    for family, impact in ATTACK_IMPACT.items():
+
+        conditional_probability = (
+
+            probabilities[family]
+
+            / raw_attack_probability
+        )
+
+        contribution = (
+
+            conditional_probability * impact
+        )
+
+        expected_impact += contribution
+
+        contributions.append({
+
+            "attack_family": family,
+
+            "class_probability":
+                probabilities[family],
+
+            "conditional_probability":
+                conditional_probability,
+
+            "impact_score": impact,
+
+            "weighted_contribution":
+                contribution,
+        })
+
+    contributions.sort(
+
+        key=lambda item:
+            item["weighted_contribution"],
+
+        reverse=True,
+    )
+
+    return {
+
+        "expected_impact":
+            float(expected_impact),
+
+        "raw_attack_probability":
+            raw_attack_probability,
+
+        "impact_contributions":
+            contributions,
+
+        "impact_available": True,
+
+        "impact_policy_version":
+            "attack_impact_v1",
+
+        "class_probabilities_calibrated":
+            False,
+    }
+
+========================================
+FILE: backend/app/device_context_service.py
+========================================
+from copy import deepcopy
+
+
+# --------------------------------------------------
+# DEMONSTRATION DEVICE INVENTORY
+# --------------------------------------------------
+
+DEVICE_PROFILES = {
+
+    "sensor-001": {
+
+        "device_id": "sensor-001",
+
+        "device_name": "Temperature Sensor",
+
+        "device_type": "sensor",
+
+        "criticality": 0.25,
+
+        "exposure": 0.30,
+
+        "business_function":
+            "Environmental monitoring",
+
+        "containment_allowed": True,
+    },
+
+    "camera-001": {
+
+        "device_id": "camera-001",
+
+        "device_name": "Security Camera",
+
+        "device_type": "camera",
+
+        "criticality": 0.70,
+
+        "exposure": 0.60,
+
+        "business_function":
+            "Physical security monitoring",
+
+        "containment_allowed": True,
+    },
+
+    "gateway-001": {
+
+        "device_id": "gateway-001",
+
+        "device_name": "IoT Gateway",
+
+        "device_type": "gateway",
+
+        "criticality": 0.90,
+
+        "exposure": 0.90,
+
+        "business_function":
+            "IoT network communication",
+
+        "containment_allowed": False,
+    },
+
+    "medical-001": {
+
+        "device_id": "medical-001",
+
+        "device_name": "Medical IoT Device",
+
+        "device_type": "medical",
+
+        "criticality": 1.00,
+
+        "exposure": 0.40,
+
+        "business_function":
+            "Patient monitoring",
+
+        "containment_allowed": False,
+    },
+
+    "industrial-001": {
+
+        "device_id": "industrial-001",
+
+        "device_name": "Industrial Controller",
+
+        "device_type": "industrial",
+
+        "criticality": 0.95,
+
+        "exposure": 0.50,
+
+        "business_function":
+            "Industrial process control",
+
+        "containment_allowed": False,
+    },
+}
+
+
+# --------------------------------------------------
+# UNKNOWN DEVICE FALLBACK
+# --------------------------------------------------
+
+UNKNOWN_DEVICE_PROFILE = {
+
+    "device_id": None,
+
+    "device_name": "Unknown Device",
+
+    "device_type": "unknown",
+
+    "criticality": 0.50,
+
+    "exposure": 0.50,
+
+    "business_function": "Unknown",
+
+    "containment_allowed": False,
+}
+
+
+# --------------------------------------------------
+# RETRIEVE DEVICE CONTEXT
+# --------------------------------------------------
+
+def get_device_context(
+    device_id: str | None = None,
+) -> dict:
+
+    if device_id is not None:
+
+        if not isinstance(device_id, str):
+
+            raise ValueError(
+                "device_id must be a string."
+            )
+
+        if not device_id.strip():
+
+            raise ValueError(
+                "device_id cannot be empty."
+            )
+
+    if device_id in DEVICE_PROFILES:
+
+        context = deepcopy(
+            DEVICE_PROFILES[device_id]
+        )
+
+        context.update({
+
+            "context_known": True,
+
+            "context_source":
+                "demonstration_inventory",
+
+            "identity_verified": False,
+
+            "simulation_only": True,
+        })
+
+        return context
+
+    context = deepcopy(
+        UNKNOWN_DEVICE_PROFILE
+    )
+
+    context.update({
+
+        "requested_device_id": device_id,
+
+        "context_known": False,
+
+        "context_source":
+            "unknown_device_fallback",
+
+        "identity_verified": False,
+
+        "simulation_only": True,
+    })
+
+    return context
+
+
+# --------------------------------------------------
+# LIST DEMONSTRATION DEVICES
+# --------------------------------------------------
+
+def list_device_profiles() -> list[dict]:
+
+    return [
+
+        get_device_context(device_id)
+
+        for device_id in DEVICE_PROFILES
+    ]
+
+========================================
+FILE: backend/app/multiclass_router.py
+========================================
+import logging
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field, ConfigDict
+from .multiclass_explainability_service import (
+    explain_prediction,
+)
+from .multiclass_ml_service import (
+    predict_traffic,
+    predict_batch,
+    get_model_info,
+)
+from .response_policy_service import (
+    plan_traffic_response,
+    get_response_policy_info,
+)
+from .context_risk_service import (
+    assess_traffic_risk,
+)
+
+from .device_context_service import (
+    list_device_profiles,
+)
+
+logger = logging.getLogger(__name__)
+
+
+router = APIRouter(
+    prefix="/api/multiclass",
+    tags=["Multiclass Intrusion Detection"],
+)
+
+
+MAX_BATCH_SIZE = 1000
+
+
+# --------------------------------------------------
+# REQUEST SCHEMAS
+# --------------------------------------------------
+
+class PredictionRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    # features: dict[str, float | int]
+    features: dict
+
+    source: str = Field(
+        default="manual",
+        max_length=100,
+    )
+
+
+class BatchPredictionRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    records: list[dict]
+
+    source: str = Field(
+        default="batch",
+        max_length=100,
+    )
+
+class ExplanationRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: dict
+
+    top_n: int = Field(
+        default=10,
+        ge=1,
+        le=36,
+        strict=True,
+    )
+
+    target_class: int | None = Field(
+        default=None,
+        ge=0,
+        le=7,
+        strict=True,
+    )
+
+    source: str = Field(
+        default="manual",
+        max_length=100,
+    )
+# --------------------------------------------------
+# MODEL INFORMATION
+# --------------------------------------------------
+
+@router.get("/model-info")
+def model_information():
+
+    return get_model_info()
+
+
+class RiskAssessmentRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: dict
+
+    device_id: str | None = Field(
+
+        default=None,
+
+        min_length=1,
+
+        max_length=100,
+
+        strict=True,
+    )
+
+    source: str = Field(
+
+        default="manual",
+
+        max_length=100,
+    )
+
+# --------------------------------------------------
+# SINGLE PREDICTION
+# --------------------------------------------------
+
+@router.post("/predict")
+def multiclass_prediction(
+    request: PredictionRequest,
+):
+
+    try:
+
+        result = predict_traffic(
+            request.features
+        )
+
+        return {
+            **result,
+            "source": request.source,
+            "incident_created": False,
+            "response_executed": False,
+            "mode": "prediction_only",
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass prediction failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Multiclass prediction failed.",
+        ) from error
+
+
+# --------------------------------------------------
+# BATCH PREDICTION
+# --------------------------------------------------
+
+@router.post("/predict-batch")
+def multiclass_batch_prediction(
+    request: BatchPredictionRequest,
+):
+
+    if not request.records:
+
+        raise HTTPException(
+            status_code=422,
+            detail="At least one record is required.",
+        )
+
+    if len(request.records) > MAX_BATCH_SIZE:
+
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Maximum batch size is "
+                f"{MAX_BATCH_SIZE} records."
+            ),
+        )
+
+    try:
+
+        predictions = predict_batch(
+            request.records
+        )
+
+        return {
+            "total_records": len(predictions),
+            "source": request.source,
+            "mode": "prediction_only",
+            "predictions": predictions,
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass batch prediction failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Batch prediction failed.",
+        ) from error
+
+# --------------------------------------------------
+# MULTICLASS SHAP EXPLANATION
+# --------------------------------------------------
+
+@router.post("/explain")
+def multiclass_explanation(
+    request: ExplanationRequest,
+):
+
+    try:
+
+        result = explain_prediction(
+
+            features=request.features,
+
+            top_n=request.top_n,
+
+            target_class=request.target_class,
+        )
+
+        return {
+
+            **result,
+
+            "source":
+                request.source,
+
+            "mode":
+                "explanation_only",
+
+            "incident_created":
+                False,
+
+            "response_executed":
+                False,
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail=str(error),
+
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass explanation failed."
+        )
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Multiclass explanation failed."
+            ),
+
+        ) from error
+
+# --------------------------------------------------
+# DEMONSTRATION DEVICE PROFILES
+# --------------------------------------------------
+
+@router.get("/device-profiles")
+def multiclass_device_profiles():
+
+    devices = list_device_profiles()
+
+    return {
+
+        "total_devices": len(devices),
+
+        "mode": "demonstration_only",
+
+        "devices": devices,
+    }
+
+
+# --------------------------------------------------
+# CONTEXT-AWARE RISK ASSESSMENT
+# --------------------------------------------------
+
+@router.post("/assess-risk")
+def multiclass_risk_assessment(
+
+    request: RiskAssessmentRequest,
+
+):
+
+    try:
+
+        result = assess_traffic_risk(
+
+            features=request.features,
+
+            device_id=request.device_id,
+        )
+
+        return {
+
+            **result,
+
+            "source": request.source,
+        }
+
+    except (ValueError, OverflowError) as error:
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail=str(error),
+
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+
+            "Context-aware risk assessment failed."
+        )
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail="Risk assessment failed.",
+
+        ) from error
+
+# --------------------------------------------------
+# RESPONSE POLICY INFORMATION
+# --------------------------------------------------
+
+@router.get("/response-policy")
+def response_policy_information():
+
+    return get_response_policy_info()
+
+
+# --------------------------------------------------
+# CONTROLLED RESPONSE PLANNING
+# --------------------------------------------------
+
+@router.post("/plan-response")
+def multiclass_response_planning(
+    request: RiskAssessmentRequest,
+):
+
+    try:
+
+        result = plan_traffic_response(
+            features=request.features,
+            device_id=request.device_id,
+        )
+
+        return {
+            **result,
+            "source": request.source,
+        }
+
+    except (ValueError, OverflowError) as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Controlled response planning failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Response planning failed.",
+        ) from error
+
+
+========================================
+FILE: frontend/src/app/core/models/prediction.model.ts
+========================================
+import type { TrafficFeatures } from '../../services/api';
+
+export type { TrafficFeatures };
+
+export type AttackLabel =
+  0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export type AttackFamily =
+  | 'Benign'
+  | 'DDoS'
+  | 'DoS'
+  | 'Reconnaissance'
+  | 'BruteForce'
+  | 'Spoofing'
+  | 'Mirai'
+  | 'WebBased';
+
+export const ATTACK_LABELS: Record<AttackLabel, AttackFamily> = {
+  0: 'Benign',
+  1: 'DDoS',
+  2: 'DoS',
+  3: 'Reconnaissance',
+  4: 'BruteForce',
+  5: 'Spoofing',
+  6: 'Mirai',
+  7: 'WebBased',
+};
+
+export type DetectionStatus =
+  | 'low_probability'
+  | 'suspicious'
+  | 'elevated_suspicion'
+  | 'high_confidence_attack';
+
+export type RiskLevel =
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'critical';
+
+export interface MulticlassPrediction {
+  predicted_label: AttackLabel;
+  predicted_family: AttackFamily;
+  prediction: 'normal' | 'attack';
+  prediction_confidence: number;
+  candidate_attack_family: Exclude<AttackFamily, 'Benign'>;
+  candidate_attack_probability: number;
+  benign_probability: number;
+  raw_attack_probability: number;
+  attack_probability: number;
+  calibrated_attack_probability: number;
+  class_probabilities: Record<AttackFamily, number>;
+  class_probabilities_calibrated: boolean;
+  detection_status: DetectionStatus;
+  high_confidence_alert: boolean;
+  alert_threshold: number;
+  model_version: string;
+  calibration_scope: string;
+  calibration_independently_validated: boolean;
+}
+
+export interface MulticlassPredictionRequest {
+  features: TrafficFeatures;
+  source?: string;
+}
+
+export interface MulticlassPredictionResponse
+  extends MulticlassPrediction {
+  source: string;
+  incident_created: boolean;
+  response_executed: boolean;
+  mode: 'prediction_only';
+}
+
+export interface ModelInfo {
+  model_version: string;
+  algorithm: string;
+  configuration: string;
+  feature_count: number;
+  features: string[];
+  class_count: number;
+  labels: Record<string, AttackFamily>;
+  calibrated: boolean;
+  calibration_scope: string;
+  validation_supported_labels: number[];
+  high_confidence_threshold: number;
+}
+
+
+========================================
+FILE: frontend/src/app/core/models/device.model.ts
+========================================
+export type DeviceStatus =
+  | 'online'
+  | 'offline'
+  | 'unknown'
+  | 'quarantined';
+
+export interface Device {
+  id: string;
+  device_name: string;
+  device_identifier: string;
+  device_type: string;
+  location: string | null;
+  status: string;
+  last_seen_at: string | null;
+  created_at: string;
+}
+
+export interface DeviceCreate {
+  device_name: string;
+  device_identifier: string;
+  device_type: string;
+  location: string | null;
+  status: DeviceStatus;
+}
+
+export interface DeviceContextProfile {
+  device_id: string;
+  device_name: string;
+  device_type: string;
+  criticality: number;
+  exposure: number;
+  business_function: string;
+  containment_allowed: boolean;
+  context_known: boolean;
+  context_source: string;
+  identity_verified: boolean;
+  simulation_only: boolean;
+}
+
+export interface DeviceProfilesResponse {
+  total_devices: number;
+  mode: 'demonstration_only';
+  devices: DeviceContextProfile[];
+}
+
+
+========================================
+FILE: frontend/src/app/core/config/api-endpoints.ts
+========================================
+import { environment } from '../../../environments/environment';
+
+const BASE = environment.apiBaseUrl;
+const MC = `${BASE}/api/multiclass`;
+const INC = `${MC}/incidents`;
+const PR = `${BASE}/api/persistent-responses`;
+const RES = `${BASE}/api/responses`;
+
+const id = (value: string) => encodeURIComponent(value);
+
+export const API_ENDPOINTS = {
+
+  health: `${BASE}/api/health`,
+  databaseHealth: `${BASE}/api/health/database`,
+
+  model: {
+    info: `${MC}/model-info`,
+    predict: `${MC}/predict`,
+    predictBatch: `${MC}/predict-batch`,
+    explain: `${MC}/explain`,
+  },
+
+  devices: {
+    list: `${BASE}/api/devices`,
+    create: `${BASE}/api/devices`,
+    profiles: `${MC}/device-profiles`,
+  },
+
+  risk: {
+    assess: `${MC}/assess-risk`,
+  },
+
+  incidents: {
+    info: `${INC}/info`,
+    list: INC,
+    summary: `${INC}/summary`,
+    detail: (value: string) => `${INC}/${id(value)}`,
+    audit: (value: string) => `${INC}/${id(value)}/audit`,
+    status: (value: string) => `${INC}/${id(value)}/status`,
+  },
+
+  persistentResponses: {
+    info: `${PR}/info`,
+    list: PR,
+    create: PR,
+    detail: (value: string) => `${PR}/${id(value)}`,
+    audit: (value: string) => `${PR}/${id(value)}/audit`,
+  },
+
+  responsePolicy: {
+    info: `${MC}/response-policy`,
+    plan: `${MC}/plan-response`,
+  },
+
+  simulation: {
+    info: `${RES}/info`,
+    create: RES,
+    detail: (value: string) => `${RES}/${id(value)}`,
+    audit: (value: string) => `${RES}/${id(value)}/audit`,
+  },
+
+  legacy: {
+    predictions: `${BASE}/api/predictions`,
+    incidents: `${BASE}/api/incidents`,
+    explain: `${BASE}/api/explain`,
+    csvUpload: `${BASE}/api/upload/csv`,
+    assistant: `${BASE}/api/assistant/chat`,
+    websocket: `${environment.websocketBaseUrl}/ws/predictions`,
+  },
+
+} as const;
+
+
+========================================
+FILE: frontend/src/app/core/services/multiclass-api.service.ts
+========================================
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, timeout } from 'rxjs';
+
+import { environment } from '../../../environments/environment';
+import { API_ENDPOINTS } from '../config/api-endpoints';
+
+import type {
+  ModelInfo,
+  MulticlassPredictionRequest,
+  MulticlassPredictionResponse,
+} from '../models/prediction.model';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class MulticlassApiService {
+
+  private readonly http = inject(HttpClient);
+
+  getModelInfo(): Observable<ModelInfo> {
+    return this.http.get<ModelInfo>(
+      API_ENDPOINTS.model.info
+    ).pipe(
+      timeout(environment.requestTimeoutMs)
+    );
+  }
+
+  predict(
+    request: MulticlassPredictionRequest
+  ): Observable<MulticlassPredictionResponse> {
+
+    return this.http.post<MulticlassPredictionResponse>(
+      API_ENDPOINTS.model.predict,
+      request
+    ).pipe(
+      timeout(environment.analysisTimeoutMs)
+    );
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/core/services/device-context.service.ts
+========================================
+import {
+  Injectable,
+  inject,
+  signal,
+  computed,
+} from '@angular/core';
+
+import { finalize } from 'rxjs';
+
+import { DeviceApiService } from './device-api.service';
+
+import type {
+  DeviceContextProfile,
+} from '../models/device.model';
+
+import {
+  getApiErrorMessage,
+} from '../../shared/utilities/api-error';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class DeviceContextService {
+
+  private readonly api = inject(DeviceApiService);
+
+  private readonly profileState =
+    signal<DeviceContextProfile[]>([]);
+
+  private readonly selectedIdState =
+    signal<string | null>(null);
+
+  private readonly loadingState = signal(false);
+
+  private readonly loadedState = signal(false);
+
+  private readonly errorState = signal('');
+
+  readonly profiles = this.profileState.asReadonly();
+
+  readonly selectedDeviceId =
+    this.selectedIdState.asReadonly();
+
+  readonly loading = this.loadingState.asReadonly();
+
+  readonly loaded = this.loadedState.asReadonly();
+
+  readonly error = this.errorState.asReadonly();
+
+  readonly selectedProfile = computed(() => {
+
+    const selectedId = this.selectedIdState();
+
+    return this.profileState().find(
+      profile => profile.device_id === selectedId
+    ) ?? null;
+
+  });
+
+  readonly totalProfiles = computed(
+    () => this.profileState().length
+  );
+
+  readonly restrictedProfiles = computed(
+    () => this.profileState().filter(
+      profile => !profile.containment_allowed
+    ).length
+  );
+
+  readonly verifiedProfiles = computed(
+    () => this.profileState().filter(
+      profile => profile.identity_verified
+    ).length
+  );
+
+  loadProfiles(force = false): void {
+
+    if (
+      this.loadingState() ||
+      (this.loadedState() && !force)
+    ) {
+      return;
+    }
+
+    this.loadingState.set(true);
+    this.errorState.set('');
+
+    this.api.getDeviceProfiles().pipe(
+
+      finalize(() => this.loadingState.set(false))
+
+    ).subscribe({
+
+      next: response => {
+
+        this.profileState.set(response.devices);
+        this.loadedState.set(true);
+
+        const selectedId = this.selectedIdState();
+
+        if (
+          selectedId !== null &&
+          !response.devices.some(
+            profile => profile.device_id === selectedId
+          )
+        ) {
+          this.selectedIdState.set(null);
+        }
+
+      },
+
+      error: error => {
+
+        this.profileState.set([]);
+        this.selectedIdState.set(null);
+        this.loadedState.set(false);
+
+        this.errorState.set(
+          getApiErrorMessage(error)
+        );
+
+      },
+
+    });
+
+  }
+
+  selectDevice(deviceId: string | null): boolean {
+
+    if (deviceId === null) {
+
+      this.selectedIdState.set(null);
+
+      return true;
+
+    }
+
+    if (
+      this.loadingState() ||
+      !this.loadedState() ||
+      !this.profileState().some(
+        profile => profile.device_id === deviceId
+      )
+    ) {
+      return false;
+    }
+
+    this.selectedIdState.set(deviceId);
+
+    return true;
+
+  }
+
+  clearSelection(): void {
+
+    this.selectedIdState.set(null);
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.ts
+========================================
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  inject,
+  signal,
+  computed,
+} from '@angular/core';
+
+import { FormsModule } from '@angular/forms';
+import { DecimalPipe } from '@angular/common';
+
+import {
+  DeviceContextSelector,
+} from '../../shared/components/device-context-selector/device-context-selector';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize } from 'rxjs';
+
+import {
+  MulticlassApiService,
+} from '../../core/services/multiclass-api.service';
+
+import {
+  NotificationService,
+} from '../../core/services/notification.service';
+
+import {
+  ATTACK_LABELS,
+} from '../../core/models/prediction.model';
+
+import type {
+  ModelInfo,
+  TrafficFeatures,
+  AttackFamily,
+  MulticlassPredictionResponse,
+} from '../../core/models/prediction.model';
+
+import {
+  getApiErrorMessage,
+} from '../../shared/utilities/api-error';
+
+@Component({
+  selector: 'app-detection',
+  standalone: true,
+  imports: [
+    FormsModule,
+    DecimalPipe,
+    DeviceContextSelector,
+  ],
+  templateUrl: './detection.html',
+  styleUrl: './detection.scss',
+})
+export class Detection implements OnInit {
+
+  private readonly api = inject(MulticlassApiService);
+
+  private readonly notifications =
+    inject(NotificationService);
+
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected readonly modelInfo =
+    signal<ModelInfo | null>(null);
+
+  protected readonly modelLoading = signal(false);
+
+  protected readonly modelError = signal('');
+
+  protected readonly submitting = signal(false);
+
+  protected readonly errorMessage = signal('');
+
+  protected readonly result =
+    signal<MulticlassPredictionResponse | null>(null);
+
+  protected readonly families =
+    Object.values(ATTACK_LABELS);
+
+  protected trafficJson = '';
+
+  protected readonly statusLabels: Record<string, string> = {
+    low_probability: 'Low attack probability',
+    suspicious: 'Suspicious traffic',
+    elevated_suspicion: 'Elevated suspicion',
+    high_confidence_attack: 'High-confidence attack',
+  };
+
+  protected readonly probabilityRows = computed(() => {
+
+    const prediction = this.result();
+
+    if (!prediction) {
+      return [];
+    }
+
+    return this.families.map(family => ({
+      family,
+      probability: prediction.class_probabilities[family],
+      predicted: prediction.predicted_family === family,
+    }));
+
+  });
+
+  protected readonly unsupportedClass = computed(() => {
+
+    const prediction = this.result();
+    const model = this.modelInfo();
+
+    if (!prediction || !model) {
+      return false;
+    }
+
+    return !model.validation_supported_labels.includes(
+      prediction.predicted_label
+    );
+
+  });
+
+  ngOnInit(): void {
+    this.loadModelInfo();
+  }
+
+  protected loadModelInfo(): void {
+
+    if (this.modelLoading() || this.submitting()) {
+      return;
+    }
+
+    this.modelLoading.set(true);
+    this.modelError.set('');
+    this.modelInfo.set(null);
+
+    this.api.getModelInfo().pipe(
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.modelLoading.set(false))
+    ).subscribe({
+
+      next: info => {
+
+        if (
+          !Array.isArray(info.features) ||
+          info.feature_count !== 36 ||
+          info.features.length !== 36 ||
+          info.class_count !== 8
+        ) {
+          this.modelError.set(
+            'Unexpected model configuration.'
+          );
+          return;
+        }
+
+        this.modelInfo.set(info);
+
+      },
+
+      error: error => {
+        this.modelError.set(getApiErrorMessage(error));
+      },
+
+    });
+
+  }
+
+  protected loadTemplate(): void {
+
+    const model = this.modelInfo();
+
+    if (!model || this.submitting()) {
+      return;
+    }
+
+    const template = Object.fromEntries(
+      model.features.map(feature => [feature, null])
+    );
+
+    this.trafficJson = JSON.stringify(
+      template, null, 2
+    );
+
+    this.result.set(null);
+    this.errorMessage.set('');
+
+    this.notifications.info(
+      'Replace every null value with a measured numerical feature.',
+      'Feature template loaded'
+    );
+
+  }
+
+  protected clearInput(): void {
+
+    if (this.submitting()) {
+      return;
+    }
+
+    this.trafficJson = '';
+    this.errorMessage.set('');
+    this.result.set(null);
+
+  }
+
+  protected onInputChange(value: string): void {
+
+    this.trafficJson = value;
+    this.errorMessage.set('');
+    this.result.set(null);
+
+  }
+
+  private validateFeatures(): TrafficFeatures {
+
+    const model = this.modelInfo();
+
+    if (!model) {
+      throw new Error(
+        'Model information is unavailable.'
+      );
+    }
+
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(this.trafficJson);
+    } catch {
+      throw new Error(
+        'Invalid JSON. Enter a valid traffic feature object.'
+      );
+    }
+
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error(
+        'Traffic features must be a JSON object.'
+      );
+    }
+
+    const input = parsed as Record<string, unknown>;
+
+    const missing = model.features.filter(
+      feature => !Object.prototype.hasOwnProperty.call(
+        input, feature
+      )
+    );
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing features: ${missing.join(', ')}`
+      );
+    }
+
+    const extra = Object.keys(input).filter(
+      feature => !model.features.includes(feature)
+    );
+
+    if (extra.length > 0) {
+      throw new Error(
+        `Unexpected features: ${extra.join(', ')}`
+      );
+    }
+
+    const invalid = model.features.filter(feature => {
+
+      const value = input[feature];
+
+      return (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        Math.abs(value) > 3.4028234663852886e38
+      );
+
+    });
+
+    if (invalid.length > 0) {
+      throw new Error(
+        `Invalid numerical values: ${invalid.join(', ')}`
+      );
+    }
+
+    const ordered = Object.fromEntries(
+      model.features.map(feature => [
+        feature,
+        input[feature],
+      ])
+    );
+
+    return ordered as unknown as TrafficFeatures;
+
+  }
+
+  private validateResponse(
+    response: MulticlassPredictionResponse
+  ): boolean {
+
+    const model = this.modelInfo();
+
+    const validProbability = (value: unknown): boolean =>
+      typeof value === 'number' &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 1;
+
+    if (
+      !response ||
+      !model ||
+      response.model_version !== model.model_version ||
+      ATTACK_LABELS[response.predicted_label] !==
+        response.predicted_family ||
+      !validProbability(response.prediction_confidence) ||
+      !validProbability(response.raw_attack_probability) ||
+      !validProbability(response.calibrated_attack_probability) ||
+      !response.class_probabilities ||
+      !this.families.every(family =>
+        validProbability(
+          response.class_probabilities[family]
+        )
+      ) ||
+      !Object.prototype.hasOwnProperty.call(
+        this.statusLabels,
+        response.detection_status
+      ) ||
+      response.mode !== 'prediction_only' ||
+      response.incident_created !== false ||
+      response.response_executed !== false
+    ) {
+      return false;
+    }
+
+    const sum = this.families.reduce(
+      (total, family) =>
+        total + response.class_probabilities[family],
+      0
+    );
+
+    return Math.abs(sum - 1) < 0.0001;
+
+  }
+
+  protected detectTraffic(): void {
+
+    if (this.submitting() || !this.modelInfo()) {
+      return;
+    }
+
+    this.errorMessage.set('');
+    this.result.set(null);
+
+    let features: TrafficFeatures;
+
+    try {
+      features = this.validateFeatures();
+    } catch (error) {
+
+      this.errorMessage.set(
+        error instanceof Error
+          ? error.message
+          : 'Invalid traffic features.'
+      );
+
+      return;
+
+    }
+
+    this.submitting.set(true);
+
+    this.api.predict({
+      features,
+      source: 'manual',
+    }).pipe(
+
+      takeUntilDestroyed(this.destroyRef),
+
+      finalize(() => this.submitting.set(false))
+
+    ).subscribe({
+
+      next: response => {
+
+        if (!this.validateResponse(response)) {
+
+          this.errorMessage.set(
+            'Unexpected prediction response. Check the backend model and API contract.'
+          );
+
+          return;
+
+        }
+
+        this.result.set(response);
+
+        if (response.high_confidence_alert) {
+
+          this.notifications.warning(
+            `Predicted family: ${response.predicted_family}. Further assessment is recommended.`,
+            'High-confidence attack'
+          );
+
+        } else {
+
+          this.notifications.success(
+            'Multiclass prediction completed.',
+            'Analysis completed'
+          );
+
+        }
+
+      },
+
+      error: error => {
+
+        this.errorMessage.set(
+          getApiErrorMessage(error)
+        );
+
+      },
+
+    });
+
+  }
+
+}
+
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.html
+========================================
+<div class="detection-page">
+
+  <section class="detection-heading">
+
+    <div class="heading-icon">
+      <svg viewBox="0 0 24 24" width="28" height="28"
+           fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z"/>
+        <path d="M12 8v5m0 4h.01"/>
+      </svg>
+    </div>
+
+    <div>
+      <h2>Multiclass Intrusion Detection</h2>
+      <p>
+        Analyze network traffic using the calibrated
+        multiclass Random Forest model.
+      </p>
+    </div>
+
+  </section>
+
+  @if (modelLoading()) {
+
+    <div class="panel loading-panel" role="status">
+      <span class="spinner"></span>
+      Loading model information...
+    </div>
+
+  }
+
+  @if (modelError()) {
+
+    <div class="error-panel" role="alert">
+      <p>{{ modelError() }}</p>
+
+      <button type="button" class="secondary-button"
+              (click)="loadModelInfo()">
+        Retry
+      </button>
+    </div>
+
+  }
+
+  @if (modelInfo(); as model) {
+
+    <section class="model-grid">
+
+      <div class="metric-card">
+        <span>Classification classes</span>
+        <strong>{{ model.class_count }}</strong>
+      </div>
+
+      <div class="metric-card">
+        <span>Required features</span>
+        <strong>{{ model.feature_count }}</strong>
+      </div>
+
+      <div class="metric-card">
+        <span>High-confidence threshold</span>
+        <strong>
+          {{ model.high_confidence_threshold * 100 | number:'1.0-1' }}%
+        </strong>
+      </div>
+
+      <div class="metric-card">
+        <span>Probability calibration</span>
+        <strong class="green">
+          {{ model.calibrated ? 'Enabled' : 'Disabled' }}
+        </strong>
+      </div>
+
+    </section>
+
+    <section class="panel model-panel">
+
+      <h3>Model Information</h3>
+
+      <div class="metadata-grid">
+
+        <div>
+          <span>Algorithm</span>
+          <strong>{{ model.algorithm }}</strong>
+        </div>
+
+        <div>
+          <span>Model version</span>
+          <strong>{{ model.model_version }}</strong>
+        </div>
+
+        <div>
+          <span>Configuration</span>
+          <strong>{{ model.configuration }}</strong>
+        </div>
+
+        <div>
+          <span>Validation-supported classes</span>
+          <strong>
+            {{ model.validation_supported_labels.length }}
+            / {{ model.class_count }}
+          </strong>
+        </div>
+
+      </div>
+
+      <div class="family-list">
+        @for (family of families; track family) {
+          <span class="family-chip">{{ family }}</span>
+        }
+      </div>
+
+    </section>
+
+  }
+
+  <app-device-context-selector
+    [disabled]="submitting()">
+  </app-device-context-selector>
+
+  <div class="workspace">
+
+    <section class="panel input-panel">
+
+      <div class="panel-heading">
+        <h3>Network Traffic Input</h3>
+        <span class="mode-chip">Prediction only</span>
+      </div>
+
+      <p class="muted">
+        Enter a JSON object containing all 36 numerical
+        network traffic features.
+      </p>
+
+      <div class="button-row">
+
+        <button type="button" class="secondary-button"
+                (click)="loadTemplate()"
+                [disabled]="!modelInfo() || submitting()">
+          Load Feature Template
+        </button>
+
+        <button type="button" class="secondary-button"
+                (click)="clearInput()"
+                [disabled]="submitting()">
+          Clear
+        </button>
+
+      </div>
+
+      <label for="traffic-json">Traffic features (JSON)</label>
+
+      <textarea
+        id="traffic-json"
+        [ngModel]="trafficJson"
+        (ngModelChange)="onInputChange($event)"
+        [disabled]="submitting()"
+        placeholder="Paste network traffic features here..."
+        spellcheck="false"
+      ></textarea>
+
+      @if (errorMessage()) {
+        <div class="error-panel" role="alert">
+          {{ errorMessage() }}
+        </div>
+      }
+
+      <button
+        type="button"
+        class="primary-button"
+        (click)="detectTraffic()"
+        [disabled]="submitting() || !modelInfo() ||
+                    !trafficJson.trim()"
+      >
+
+        @if (submitting()) {
+          <span class="spinner"></span>
+          Analyzing Traffic...
+        } @else {
+          <svg viewBox="0 0 24 24" width="18" height="18"
+               fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round"
+               aria-hidden="true">
+            <circle cx="10" cy="10" r="6"/>
+            <path d="m15 15 6 6"/>
+          </svg>
+          Analyze Traffic
+        }
+
+      </button>
+
+      <p class="muted small">
+        This operation does not save a prediction,
+        create an incident or execute a response.
+      </p>
+
+    </section>
+
+    <section class="panel result-panel"
+             [attr.aria-busy]="submitting()">
+
+      <h3>Prediction Results</h3>
+
+      @if (submitting()) {
+
+        <div class="empty-state" role="status">
+          <span class="spinner large"></span>
+          <strong>Analyzing network traffic</strong>
+          <p>Waiting for the multiclass model.</p>
+        </div>
+
+      } @else if (result(); as prediction) {
+
+        <div class="prediction-banner"
+             [class.benign]="prediction.predicted_family === 'Benign'">
+
+          <span>Predicted family</span>
+
+          <strong>{{ prediction.predicted_family }}</strong>
+
+          <span>
+            {{ statusLabels[prediction.detection_status] }}
+          </span>
+
+        </div>
+
+        @if (unsupportedClass()) {
+
+          <div class="warning-panel" role="status">
+            This class was not represented in the validation
+            split. Its predictive reliability has not been
+            established by that validation experiment.
+          </div>
+
+        }
+
+        <div class="result-metrics">
+
+          <div class="metric-card">
+            <span>Model confidence</span>
+            <strong>
+              {{ prediction.prediction_confidence * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Calibrated attack probability</span>
+            <strong>
+              {{ prediction.calibrated_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Raw attack probability</span>
+            <strong>
+              {{ prediction.raw_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Benign class probability</span>
+            <strong>
+              {{ prediction.benign_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+        </div>
+
+        <h4>Class Probability Distribution</h4>
+
+        <div class="probability-list">
+
+          @for (item of probabilityRows(); track item.family) {
+
+            <div class="probability-row">
+
+              <span class="probability-label">
+                {{ item.family }}
+              </span>
+
+              <div class="probability-track"
+                   role="meter"
+                   [attr.aria-label]="item.family + ' probability'"
+                   aria-valuemin="0"
+                   aria-valuemax="100"
+                   [attr.aria-valuenow]="item.probability * 100">
+
+                <div
+                  class="probability-fill"
+                  [class.predicted]="item.predicted"
+                  [class.normal]="item.family === 'Benign'"
+                  [style.width.%]="item.probability * 100">
+                </div>
+
+              </div>
+
+              <strong>
+                {{ item.probability * 100 | number:'1.2-2' }}%
+              </strong>
+
+            </div>
+
+          }
+
+        </div>
+
+        <div class="information-panel">
+
+          <strong>Probability interpretation</strong>
+
+          <p>
+            Individual family probabilities are uncalibrated.
+            Calibration applies only to the overall attack
+            versus benign probability.
+          </p>
+
+          @if (!prediction.calibration_independently_validated) {
+            <p>
+              Calibration has not yet been independently
+              evaluated on the held-out test set.
+            </p>
+          }
+
+        </div>
+
+        <div class="metadata-grid">
+
+          <div>
+            <span>Incident created</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Response executed</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Context-aware risk</span>
+            <strong>Not assessed</strong>
+          </div>
+
+          <div>
+            <span>Model version</span>
+            <strong>{{ prediction.model_version }}</strong>
+          </div>
+
+        </div>
+
+      } @else {
+
+        <div class="empty-state">
+
+          <svg viewBox="0 0 24 24" width="52" height="52"
+               fill="none" stroke="currentColor"
+               stroke-width="1.3" stroke-linecap="round"
+               aria-hidden="true">
+            <path d="M3 3v18h18M7 16v-4m5 4V7m5 9v-6"/>
+          </svg>
+
+          <strong>No prediction available</strong>
+
+          <p>
+            Enter valid network traffic features and
+            select Analyze Traffic.
+          </p>
+
+        </div>
+
+      }
+
+    </section>
+
+  </div>
+
+</div>
+
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.scss
+========================================
+:host {
+  display: block;
+  min-width: 0;
+  color: #e2e8f0;
+}
+
+.detection-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.detection-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.heading-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, .1);
+}
+
+h2, h3, h4 {
+  margin: 0;
+  color: #f1f5f9;
+}
+
+h2 { font-size: 23px; }
+h3 { font-size: 17px; }
+h4 { font-size: 14px; }
+
+p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.muted, .detection-heading p {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.small { font-size: 12px; }
+
+.model-grid,
+.metadata-grid,
+.result-metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.model-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.panel, .metric-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #29384d;
+  border-radius: 14px;
+  background: #142033;
+}
+
+.metric-card {
+  display: grid;
+  gap: 9px;
+}
+
+.metric-card span,
+.metadata-grid span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.metric-card strong {
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+
+.green { color: #4ade80; }
+
+.metadata-grid {
+  margin-top: 16px;
+}
+
+.metadata-grid > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metadata-grid strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.family-list, .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.family-chip, .mode-chip {
+  border: 1px solid #304158;
+  border-radius: 20px;
+  padding: 6px 10px;
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+label {
+  display: block;
+  margin: 16px 0 8px;
+  font-size: 13px;
+}
+
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 380px;
+  padding: 14px;
+  resize: vertical;
+  border: 1px solid #34445c;
+  border-radius: 10px;
+  background: #0b1220;
+  color: #bfdbfe;
+  font: 13px/1.7 Consolas, monospace;
+}
+
+textarea:focus-visible, button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 10px 15px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.primary-button {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.secondary-button {
+  border: 1px solid #34445c;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.result-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.prediction-banner {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #7f3945;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, .08);
+  color: #fca5a5;
+}
+
+.prediction-banner.benign {
+  border-color: #276749;
+  background: rgba(34, 197, 94, .08);
+  color: #86efac;
+}
+
+.prediction-banner strong {
+  font-size: 30px;
+  overflow-wrap: anywhere;
+}
+
+.result-metrics .metric-card {
+  background: #0b1220;
+  padding: 12px;
+}
+
+.result-metrics strong { font-size: 20px; }
+
+.probability-list {
+  display: grid;
+  gap: 12px;
+}
+
+.probability-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.probability-row strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.probability-track {
+  height: 8px;
+  border-radius: 8px;
+  background: #29384d;
+  overflow: hidden;
+}
+
+.probability-fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: inherit;
+}
+
+.probability-fill.predicted { background: #ef4444; }
+.probability-fill.normal { background: #22c55e; }
+
+.empty-state {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.error-panel,
+.warning-panel,
+.information-panel {
+  padding: 13px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.error-panel {
+  background: #3b202b;
+  color: #fca5a5;
+}
+
+.warning-panel {
+  background: #382e1c;
+  color: #fcd34d;
+}
+
+.information-panel {
+  background: #142c43;
+  color: #bfdbfe;
+}
+
+.loading-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  border: 2px solid #64748b;
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+.spinner.large {
+  width: 42px;
+  height: 42px;
+  border-width: 3px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1200px) {
+  .model-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .detection-page { gap: 14px; }
+  .panel { padding: 14px; }
+  .metric-card { padding: 12px; }
+  h2 { font-size: 18px; }
+  textarea { min-height: 300px; }
+  .metadata-grid { grid-template-columns: minmax(0, 1fr); }
+  .probability-row {
+    grid-template-columns: 95px minmax(0, 1fr) 55px;
+    gap: 5px;
+  }
+  .metric-card strong { font-size: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+/* Phase 11.5.9 responsive refinement */
+.detection-page { gap: 14px; }
+.panel, .metric-card { padding: 14px; }
+textarea { min-height: 220px; height: clamp(220px, 34vh, 340px); }
+.empty-state { min-height: 180px; padding: 16px 0; }
+.metadata-grid, .family-list, .button-row { margin-top: 12px; }
+@media (max-width: 600px) {
+  .detection-heading { align-items: flex-start; gap: 10px; }
+  .heading-icon { width: 40px; height: 40px; }
+  .metric-card { padding: 10px; }
+  .result-metrics { grid-template-columns: minmax(0,1fr); }
+  .probability-row { grid-template-columns: 90px minmax(0,1fr) 52px; }
+  textarea { min-height: 200px; }
+}
+

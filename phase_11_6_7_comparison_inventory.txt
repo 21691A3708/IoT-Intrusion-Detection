@@ -1,0 +1,5063 @@
+﻿
+========================================
+FILE: backend/app/multiclass_ml_service.py
+========================================
+from pathlib import Path
+from numbers import Real
+import math
+
+import joblib
+import numpy as np
+import pandas as pd
+
+from .calibration_service import (
+    calibrate_attack_probability,
+)
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+MODEL_PATH = (
+    PROJECT_ROOT
+    / "models"
+    / "random_forest_multiclass_calibrated.joblib"
+)
+
+EXPECTED_FEATURES = [
+    "Header_Length",
+    "Protocol Type",
+    "Time_To_Live",
+    "Rate",
+    "fin_flag_number",
+    "syn_flag_number",
+    "rst_flag_number",
+    "psh_flag_number",
+    "ack_flag_number",
+    "ece_flag_number",
+    "cwr_flag_number",
+    "ack_count",
+    "syn_count",
+    "fin_count",
+    "rst_count",
+    "HTTP",
+    "HTTPS",
+    "DNS",
+    "SSH",
+    "IRC",
+    "TCP",
+    "UDP",
+    "DHCP",
+    "ARP",
+    "ICMP",
+    "IGMP",
+    "IPv",
+    "LLC",
+    "Tot sum",
+    "Min",
+    "Max",
+    "AVG",
+    "Std",
+    "Tot size",
+    "IAT",
+    "Variance",
+]
+
+EXPECTED_LABELS = {
+    0: "Benign",
+    1: "DDoS",
+    2: "DoS",
+    3: "Reconnaissance",
+    4: "BruteForce",
+    5: "Spoofing",
+    6: "Mirai",
+    7: "WebBased",
+}
+
+HIGH_CONFIDENCE_THRESHOLD = 0.90
+
+
+# Load the saved model bundle.
+
+if not MODEL_PATH.is_file():
+    raise FileNotFoundError(
+        f"Multiclass model not found: {MODEL_PATH}"
+    )
+
+BUNDLE = joblib.load(MODEL_PATH)
+
+MODEL = BUNDLE["model"]
+
+FEATURE_NAMES = list(
+    BUNDLE["feature_names"]
+)
+
+LABELS = {
+    int(key): value
+    for key, value in BUNDLE["labels"].items()
+}
+
+MODEL_VERSION = BUNDLE["model_version"]
+
+CALIBRATION = BUNDLE["calibration"]
+
+MODEL.set_params(verbose=0)
+
+
+# Validate model metadata.
+
+if FEATURE_NAMES != EXPECTED_FEATURES:
+    raise RuntimeError(
+        "Multiclass feature schema mismatch."
+    )
+
+if LABELS != EXPECTED_LABELS:
+    raise RuntimeError(
+        "Multiclass label mapping mismatch."
+    )
+
+if MODEL.n_features_in_ != len(FEATURE_NAMES):
+    raise RuntimeError(
+        "Model feature count mismatch."
+    )
+
+if list(MODEL.feature_names_in_) != FEATURE_NAMES:
+    raise RuntimeError(
+        "Model feature order mismatch."
+    )
+
+if set(MODEL.classes_) != set(LABELS):
+    raise RuntimeError(
+        "Model class mapping mismatch."
+    )
+
+CLASS_POSITIONS = {
+    int(label): index
+    for index, label in enumerate(MODEL.classes_)
+}
+
+
+def validate_features(features: dict) -> pd.DataFrame:
+
+    if not isinstance(features, dict):
+        raise ValueError(
+            "Features must be provided as a dictionary."
+        )
+
+    missing = [
+        name
+        for name in FEATURE_NAMES
+        if name not in features
+    ]
+
+    extra = [
+        name
+        for name in features
+        if name not in FEATURE_NAMES
+    ]
+
+    if missing:
+        raise ValueError(
+            f"Missing features: {missing}"
+        )
+
+    if extra:
+        raise ValueError(
+            f"Unexpected features: {extra}"
+        )
+
+    values = []
+
+    for name in FEATURE_NAMES:
+
+        value = features[name]
+
+        if isinstance(value, (bool, np.bool_)):
+            raise ValueError(
+                f"{name} cannot be a boolean."
+            )
+
+        if not isinstance(value, Real):
+            raise ValueError(
+                f"{name} must be numeric."
+            )
+
+        value = float(value)
+
+        if not math.isfinite(value):
+            raise ValueError(
+                f"{name} must be finite."
+            )
+
+        if abs(value) > np.finfo(np.float32).max:
+            raise ValueError(
+                f"{name} exceeds the float32 range."
+            )
+
+        values.append(value)
+
+    return pd.DataFrame(
+        [values],
+        columns=FEATURE_NAMES,
+        dtype="float32",
+    )
+
+
+def get_detection_status(
+    attack_probability: float,
+) -> str:
+
+    if attack_probability >= HIGH_CONFIDENCE_THRESHOLD:
+        return "high_confidence_attack"
+
+    if attack_probability >= 0.75:
+        return "elevated_suspicion"
+
+    if attack_probability >= 0.50:
+        return "suspicious"
+
+    return "low_probability"
+
+
+def format_prediction(probabilities) -> dict:
+
+    probabilities = np.asarray(
+        probabilities,
+        dtype=float,
+    )
+
+    predicted_index = int(
+        np.argmax(probabilities)
+    )
+
+    predicted_label = int(
+        MODEL.classes_[predicted_index]
+    )
+
+    predicted_family = LABELS[
+        predicted_label
+    ]
+
+    benign_index = CLASS_POSITIONS[0]
+
+    benign_probability = float(
+        probabilities[benign_index]
+    )
+
+    raw_attack_probability = float(
+        np.clip(
+            1.0 - benign_probability,
+            0.0,
+            1.0,
+        )
+    )
+
+    calibrated_probability = (
+        calibrate_attack_probability(
+            raw_attack_probability,
+            CALIBRATION,
+        )
+    )
+
+    class_probabilities = {
+        LABELS[int(label)]: float(
+            probabilities[index]
+        )
+        for index, label in enumerate(MODEL.classes_)
+    }
+
+    # Most probable attack family,
+    # even if Benign is the overall top class.
+
+    attack_labels = [
+        label
+        for label in LABELS
+        if label != 0
+    ]
+
+    candidate_label = max(
+        attack_labels,
+        key=lambda label: probabilities[
+            CLASS_POSITIONS[label]
+        ],
+    )
+
+    candidate_probability = float(
+        probabilities[
+            CLASS_POSITIONS[candidate_label]
+        ]
+    )
+
+    candidate_family = (
+        LABELS[candidate_label]
+        if candidate_probability > 0
+        else None
+    )
+
+    return {
+
+        "predicted_label": predicted_label,
+
+        "predicted_family": predicted_family,
+
+        # Original classifier decision.
+        "prediction": (
+            "normal"
+            if predicted_label == 0
+            else "attack"
+        ),
+
+        "prediction_confidence": float(
+            probabilities[predicted_index]
+        ),
+
+        "candidate_attack_family":
+            candidate_family,
+
+        "candidate_attack_probability":
+            candidate_probability,
+
+        "benign_probability":
+            benign_probability,
+
+        "raw_attack_probability":
+            raw_attack_probability,
+
+        "attack_probability":
+            calibrated_probability,
+
+        "calibrated_attack_probability":
+            calibrated_probability,
+
+        "class_probabilities":
+            class_probabilities,
+
+        "class_probabilities_calibrated":
+            False,
+
+        "detection_status":
+            get_detection_status(
+                calibrated_probability
+            ),
+
+        "high_confidence_alert": (
+            calibrated_probability
+            >= HIGH_CONFIDENCE_THRESHOLD
+        ),
+
+        "alert_threshold":
+            HIGH_CONFIDENCE_THRESHOLD,
+
+        "model_version":
+            MODEL_VERSION,
+
+        "calibration_scope":
+            "binary_attack_probability",
+
+        "calibration_independently_validated":
+            False,
+    }
+
+
+def predict_traffic(features: dict) -> dict:
+
+    frame = validate_features(features)
+
+    probabilities = MODEL.predict_proba(
+        frame
+    )[0]
+
+    return format_prediction(
+        probabilities
+    )
+
+
+def predict_batch(records: list) -> list:
+
+    if not isinstance(records, list):
+        raise ValueError(
+            "Records must be provided as a list."
+        )
+
+    if not records:
+        return []
+
+    frames = [
+        validate_features(record)
+        for record in records
+    ]
+
+    frame = pd.concat(
+        frames,
+        ignore_index=True,
+    )
+
+    probabilities = MODEL.predict_proba(
+        frame
+    )
+
+    return [
+        format_prediction(row)
+        for row in probabilities
+    ]
+
+
+def get_model_info() -> dict:
+
+    return {
+
+        "model_version":
+            MODEL_VERSION,
+
+        "algorithm":
+            "RandomForestClassifier",
+
+        "configuration":
+            BUNDLE.get("configuration"),
+
+        "feature_count":
+            len(FEATURE_NAMES),
+
+        "features":
+            FEATURE_NAMES,
+
+        "class_count":
+            len(LABELS),
+
+        "labels":
+            LABELS,
+
+        "calibrated":
+            BUNDLE.get("calibrated", False),
+
+        "calibration_scope":
+            BUNDLE.get("calibration_scope"),
+
+        "validation_supported_labels":
+            BUNDLE.get(
+                "validation_supported_labels",
+                [],
+            ),
+
+        "high_confidence_threshold":
+            HIGH_CONFIDENCE_THRESHOLD,
+    }
+
+========================================
+FILE: backend/app/context_risk_service.py
+========================================
+import math
+from numbers import Real
+
+from .device_context_service import (
+    get_device_context,
+)
+
+from .attack_impact_service import (
+    calculate_attack_impact,
+)
+
+from .multiclass_ml_service import (
+    predict_traffic,
+)
+
+
+RISK_POLICY_VERSION = "context_risk_v1"
+
+RISK_WEIGHTS = {
+
+    "criticality": 0.40,
+
+    "attack_impact": 0.40,
+
+    "exposure": 0.20,
+}
+
+
+# --------------------------------------------------
+# INPUT VALIDATION
+# --------------------------------------------------
+
+def validate_unit_value(
+    value,
+    name: str,
+) -> float:
+
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, Real)
+    ):
+
+        raise ValueError(
+            f"{name} must be numeric."
+        )
+
+    value = float(value)
+
+    if (
+        not math.isfinite(value)
+        or not 0 <= value <= 1
+    ):
+
+        raise ValueError(
+            f"{name} must be between 0 and 1."
+        )
+
+    return value
+
+
+# --------------------------------------------------
+# RISK SCORE
+# --------------------------------------------------
+
+def calculate_risk_score(
+
+    attack_probability: float,
+
+    criticality: float,
+
+    attack_impact: float,
+
+    exposure: float,
+
+) -> float:
+
+    probability = validate_unit_value(
+
+        attack_probability,
+
+        "attack_probability",
+    )
+
+    criticality = validate_unit_value(
+
+        criticality,
+
+        "criticality",
+    )
+
+    attack_impact = validate_unit_value(
+
+        attack_impact,
+
+        "attack_impact",
+    )
+
+    exposure = validate_unit_value(
+
+        exposure,
+
+        "exposure",
+    )
+
+    context_score = (
+
+        RISK_WEIGHTS["criticality"]
+        * criticality
+
+        + RISK_WEIGHTS["attack_impact"]
+        * attack_impact
+
+        + RISK_WEIGHTS["exposure"]
+        * exposure
+    )
+
+    risk_score = (
+
+        100 * probability * context_score
+    )
+
+    return float(risk_score)
+
+
+# --------------------------------------------------
+# SEVERITY CLASSIFICATION
+# --------------------------------------------------
+
+def get_risk_level(
+    risk_score: float,
+) -> str:
+
+    if risk_score < 25:
+
+        return "low"
+
+    if risk_score < 50:
+
+        return "medium"
+
+    if risk_score < 75:
+
+        return "high"
+
+    return "critical"
+
+
+# --------------------------------------------------
+# NON-DISRUPTIVE RECOMMENDATION
+# --------------------------------------------------
+
+def recommend_action(
+
+    risk_level: str,
+
+    detection_status: str,
+
+    context_known: bool,
+
+) -> str:
+
+    if risk_level == "critical":
+
+        return "priority_investigation"
+
+    if risk_level == "high":
+
+        return "alert_and_investigate"
+
+    # High attack confidence must not be ignored
+    # simply because the device has low criticality.
+
+    if detection_status == "high_confidence_attack":
+
+        return "alert_and_investigate"
+
+    if detection_status == "elevated_suspicion":
+
+        return "review_suspicious_activity"
+
+    if risk_level == "medium":
+
+        return "review_suspicious_activity"
+
+    if detection_status == "suspicious":
+
+        return "monitor_suspicious_activity"
+
+    if not context_known:
+
+        return "monitor_and_verify_device"
+
+    return "record_and_monitor"
+
+
+# --------------------------------------------------
+# CONTEXT-AWARE RISK ASSESSMENT
+# --------------------------------------------------
+
+def assess_prediction_risk(
+
+    prediction: dict,
+
+    device_id: str | None = None,
+
+) -> dict:
+
+    context = get_device_context(
+        device_id
+    )
+
+    impact_result = calculate_attack_impact(
+
+        prediction["class_probabilities"]
+    )
+
+    probability = validate_unit_value(
+
+        prediction["calibrated_attack_probability"],
+
+        "attack_probability",
+    )
+
+    criticality = context["criticality"]
+
+    exposure = context["exposure"]
+
+    attack_impact = impact_result[
+        "expected_impact"
+    ]
+
+    risk_score = calculate_risk_score(
+
+        attack_probability=probability,
+
+        criticality=criticality,
+
+        attack_impact=attack_impact,
+
+        exposure=exposure,
+    )
+
+    risk_level = get_risk_level(
+        risk_score
+    )
+
+    # Explain each factor's contribution
+    # to the final risk score.
+
+    criticality_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["criticality"]
+
+        * criticality
+    )
+
+    impact_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["attack_impact"]
+
+        * attack_impact
+    )
+
+    exposure_contribution = (
+
+        100 * probability
+
+        * RISK_WEIGHTS["exposure"]
+
+        * exposure
+    )
+
+    contribution_sum = (
+
+        criticality_contribution
+
+        + impact_contribution
+
+        + exposure_contribution
+    )
+
+    recommendation = recommend_action(
+
+        risk_level=risk_level,
+
+        detection_status=prediction[
+            "detection_status"
+        ],
+
+        context_known=context[
+            "context_known"
+        ],
+    )
+
+    warnings = [
+
+        "Risk weights and thresholds are "
+        "provisional policy parameters.",
+
+        "Device context is demonstration-only.",
+
+        "Attack probability calibration "
+        "has not been independently evaluated.",
+    ]
+
+    if not context["context_known"]:
+
+        warnings.append(
+
+            "Unknown device: fallback criticality "
+            "and exposure were used."
+        )
+
+    if not impact_result["impact_available"]:
+
+        warnings.append(
+
+            "No meaningful raw attack-class "
+            "probability mass was available "
+            "for impact estimation."
+        )
+
+    if prediction["candidate_attack_family"] == "BruteForce":
+
+        warnings.append(
+
+            "BruteForce detection has no "
+            "independent validation coverage."
+        )
+
+    return {
+
+        "risk_policy_version":
+            RISK_POLICY_VERSION,
+
+        "risk_score":
+            risk_score,
+
+        "risk_level":
+            risk_level,
+
+        "attack_probability":
+            probability,
+
+        "device_context":
+            context,
+
+        "attack_impact":
+            impact_result,
+
+        "risk_factors": {
+
+            "criticality":
+                criticality,
+
+            "attack_impact":
+                attack_impact,
+
+            "exposure":
+                exposure,
+        },
+
+        "risk_weights":
+            RISK_WEIGHTS.copy(),
+
+        "risk_contributions": {
+
+            "criticality":
+                criticality_contribution,
+
+            "attack_impact":
+                impact_contribution,
+
+            "exposure":
+                exposure_contribution,
+        },
+
+        "risk_reconstruction": {
+
+            "contribution_sum":
+                contribution_sum,
+
+            "error":
+                abs(contribution_sum - risk_score),
+
+            "passed":
+                math.isclose(
+
+                    contribution_sum,
+
+                    risk_score,
+
+                    abs_tol=1e-8,
+
+                    rel_tol=0,
+                ),
+        },
+
+        "recommended_action":
+            recommendation,
+
+        "requires_device_verification":
+            not context["identity_verified"],
+
+        "containment_authorized":
+            False,
+
+        "response_executed":
+            False,
+
+        "warnings":
+            warnings,
+    }
+
+
+# --------------------------------------------------
+# COMPLETE PREDICTION AND RISK PIPELINE
+# --------------------------------------------------
+
+def assess_traffic_risk(
+
+    features: dict,
+
+    device_id: str | None = None,
+
+) -> dict:
+
+    prediction = predict_traffic(
+        features
+    )
+
+    risk = assess_prediction_risk(
+
+        prediction=prediction,
+
+        device_id=device_id,
+    )
+
+    return {
+
+        "prediction": prediction,
+
+        "risk_assessment": risk,
+
+        "mode": "risk_assessment_only",
+
+        "incident_created": False,
+
+        "response_executed": False,
+    }
+
+========================================
+FILE: backend/app/device_context_service.py
+========================================
+from copy import deepcopy
+
+
+# --------------------------------------------------
+# DEMONSTRATION DEVICE INVENTORY
+# --------------------------------------------------
+
+DEVICE_PROFILES = {
+
+    "sensor-001": {
+
+        "device_id": "sensor-001",
+
+        "device_name": "Temperature Sensor",
+
+        "device_type": "sensor",
+
+        "criticality": 0.25,
+
+        "exposure": 0.30,
+
+        "business_function":
+            "Environmental monitoring",
+
+        "containment_allowed": True,
+    },
+
+    "camera-001": {
+
+        "device_id": "camera-001",
+
+        "device_name": "Security Camera",
+
+        "device_type": "camera",
+
+        "criticality": 0.70,
+
+        "exposure": 0.60,
+
+        "business_function":
+            "Physical security monitoring",
+
+        "containment_allowed": True,
+    },
+
+    "gateway-001": {
+
+        "device_id": "gateway-001",
+
+        "device_name": "IoT Gateway",
+
+        "device_type": "gateway",
+
+        "criticality": 0.90,
+
+        "exposure": 0.90,
+
+        "business_function":
+            "IoT network communication",
+
+        "containment_allowed": False,
+    },
+
+    "medical-001": {
+
+        "device_id": "medical-001",
+
+        "device_name": "Medical IoT Device",
+
+        "device_type": "medical",
+
+        "criticality": 1.00,
+
+        "exposure": 0.40,
+
+        "business_function":
+            "Patient monitoring",
+
+        "containment_allowed": False,
+    },
+
+    "industrial-001": {
+
+        "device_id": "industrial-001",
+
+        "device_name": "Industrial Controller",
+
+        "device_type": "industrial",
+
+        "criticality": 0.95,
+
+        "exposure": 0.50,
+
+        "business_function":
+            "Industrial process control",
+
+        "containment_allowed": False,
+    },
+}
+
+
+# --------------------------------------------------
+# UNKNOWN DEVICE FALLBACK
+# --------------------------------------------------
+
+UNKNOWN_DEVICE_PROFILE = {
+
+    "device_id": None,
+
+    "device_name": "Unknown Device",
+
+    "device_type": "unknown",
+
+    "criticality": 0.50,
+
+    "exposure": 0.50,
+
+    "business_function": "Unknown",
+
+    "containment_allowed": False,
+}
+
+
+# --------------------------------------------------
+# RETRIEVE DEVICE CONTEXT
+# --------------------------------------------------
+
+def get_device_context(
+    device_id: str | None = None,
+) -> dict:
+
+    if device_id is not None:
+
+        if not isinstance(device_id, str):
+
+            raise ValueError(
+                "device_id must be a string."
+            )
+
+        if not device_id.strip():
+
+            raise ValueError(
+                "device_id cannot be empty."
+            )
+
+    if device_id in DEVICE_PROFILES:
+
+        context = deepcopy(
+            DEVICE_PROFILES[device_id]
+        )
+
+        context.update({
+
+            "context_known": True,
+
+            "context_source":
+                "demonstration_inventory",
+
+            "identity_verified": False,
+
+            "simulation_only": True,
+        })
+
+        return context
+
+    context = deepcopy(
+        UNKNOWN_DEVICE_PROFILE
+    )
+
+    context.update({
+
+        "requested_device_id": device_id,
+
+        "context_known": False,
+
+        "context_source":
+            "unknown_device_fallback",
+
+        "identity_verified": False,
+
+        "simulation_only": True,
+    })
+
+    return context
+
+
+# --------------------------------------------------
+# LIST DEMONSTRATION DEVICES
+# --------------------------------------------------
+
+def list_device_profiles() -> list[dict]:
+
+    return [
+
+        get_device_context(device_id)
+
+        for device_id in DEVICE_PROFILES
+    ]
+
+========================================
+FILE: backend/app/attack_impact_service.py
+========================================
+import math
+from numbers import Real
+
+
+ATTACK_IMPACT = {
+
+    "DDoS": 0.90,
+
+    "DoS": 0.75,
+
+    "Reconnaissance": 0.40,
+
+    "BruteForce": 0.70,
+
+    "Spoofing": 0.80,
+
+    "Mirai": 0.95,
+
+    "WebBased": 0.85,
+}
+
+
+def calculate_attack_impact(
+    class_probabilities: dict,
+) -> dict:
+
+    if not isinstance(
+        class_probabilities, dict
+    ):
+
+        raise ValueError(
+            "Class probabilities must be a dictionary."
+        )
+
+    expected_classes = (
+        set(ATTACK_IMPACT) | {"Benign"}
+    )
+
+    if set(class_probabilities) != expected_classes:
+
+        raise ValueError(
+            "Unexpected class probability schema."
+        )
+
+    probabilities = {}
+
+    for family, value in class_probabilities.items():
+
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, Real)
+        ):
+
+            raise ValueError(
+                f"Invalid probability for {family}."
+            )
+
+        probability = float(value)
+
+        if (
+            not math.isfinite(probability)
+            or not 0 <= probability <= 1
+        ):
+
+            raise ValueError(
+                f"Invalid probability for {family}."
+            )
+
+        probabilities[family] = probability
+
+    if not math.isclose(
+        sum(probabilities.values()),
+        1.0,
+        abs_tol=1e-6,
+        rel_tol=0,
+    ):
+
+        raise ValueError(
+            "Class probabilities must sum to one."
+        )
+
+    raw_attack_probability = sum(
+
+        probabilities[family]
+
+        for family in ATTACK_IMPACT
+    )
+
+    contributions = []
+
+    if raw_attack_probability <= 1e-12:
+
+        return {
+
+            "expected_impact": 0.0,
+
+            "raw_attack_probability":
+                raw_attack_probability,
+
+            "impact_contributions": [],
+
+            "impact_available": False,
+
+            "impact_policy_version":
+                "attack_impact_v1",
+        }
+
+    expected_impact = 0.0
+
+    for family, impact in ATTACK_IMPACT.items():
+
+        conditional_probability = (
+
+            probabilities[family]
+
+            / raw_attack_probability
+        )
+
+        contribution = (
+
+            conditional_probability * impact
+        )
+
+        expected_impact += contribution
+
+        contributions.append({
+
+            "attack_family": family,
+
+            "class_probability":
+                probabilities[family],
+
+            "conditional_probability":
+                conditional_probability,
+
+            "impact_score": impact,
+
+            "weighted_contribution":
+                contribution,
+        })
+
+    contributions.sort(
+
+        key=lambda item:
+            item["weighted_contribution"],
+
+        reverse=True,
+    )
+
+    return {
+
+        "expected_impact":
+            float(expected_impact),
+
+        "raw_attack_probability":
+            raw_attack_probability,
+
+        "impact_contributions":
+            contributions,
+
+        "impact_available": True,
+
+        "impact_policy_version":
+            "attack_impact_v1",
+
+        "class_probabilities_calibrated":
+            False,
+    }
+
+========================================
+FILE: backend/app/multiclass_router.py
+========================================
+import logging
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field, ConfigDict
+from .multiclass_explainability_service import (
+    explain_prediction,
+)
+from .multiclass_ml_service import (
+    predict_traffic,
+    predict_batch,
+    get_model_info,
+)
+from .response_policy_service import (
+    plan_traffic_response,
+    get_response_policy_info,
+)
+from .context_risk_service import (
+    assess_traffic_risk,
+)
+
+from .device_context_service import (
+    list_device_profiles,
+)
+
+logger = logging.getLogger(__name__)
+
+
+router = APIRouter(
+    prefix="/api/multiclass",
+    tags=["Multiclass Intrusion Detection"],
+)
+
+
+MAX_BATCH_SIZE = 1000
+
+
+# --------------------------------------------------
+# REQUEST SCHEMAS
+# --------------------------------------------------
+
+class PredictionRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    # features: dict[str, float | int]
+    features: dict
+
+    source: str = Field(
+        default="manual",
+        max_length=100,
+    )
+
+
+class BatchPredictionRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    records: list[dict]
+
+    source: str = Field(
+        default="batch",
+        max_length=100,
+    )
+
+class ExplanationRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: dict
+
+    top_n: int = Field(
+        default=10,
+        ge=1,
+        le=36,
+        strict=True,
+    )
+
+    target_class: int | None = Field(
+        default=None,
+        ge=0,
+        le=7,
+        strict=True,
+    )
+
+    source: str = Field(
+        default="manual",
+        max_length=100,
+    )
+# --------------------------------------------------
+# MODEL INFORMATION
+# --------------------------------------------------
+
+@router.get("/model-info")
+def model_information():
+
+    return get_model_info()
+
+
+class RiskAssessmentRequest(BaseModel):
+
+    model_config = ConfigDict(extra="forbid")
+
+    features: dict
+
+    device_id: str | None = Field(
+
+        default=None,
+
+        min_length=1,
+
+        max_length=100,
+
+        strict=True,
+    )
+
+    source: str = Field(
+
+        default="manual",
+
+        max_length=100,
+    )
+
+# --------------------------------------------------
+# SINGLE PREDICTION
+# --------------------------------------------------
+
+@router.post("/predict")
+def multiclass_prediction(
+    request: PredictionRequest,
+):
+
+    try:
+
+        result = predict_traffic(
+            request.features
+        )
+
+        return {
+            **result,
+            "source": request.source,
+            "incident_created": False,
+            "response_executed": False,
+            "mode": "prediction_only",
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass prediction failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Multiclass prediction failed.",
+        ) from error
+
+
+# --------------------------------------------------
+# BATCH PREDICTION
+# --------------------------------------------------
+
+@router.post("/predict-batch")
+def multiclass_batch_prediction(
+    request: BatchPredictionRequest,
+):
+
+    if not request.records:
+
+        raise HTTPException(
+            status_code=422,
+            detail="At least one record is required.",
+        )
+
+    if len(request.records) > MAX_BATCH_SIZE:
+
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Maximum batch size is "
+                f"{MAX_BATCH_SIZE} records."
+            ),
+        )
+
+    try:
+
+        predictions = predict_batch(
+            request.records
+        )
+
+        return {
+            "total_records": len(predictions),
+            "source": request.source,
+            "mode": "prediction_only",
+            "predictions": predictions,
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass batch prediction failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Batch prediction failed.",
+        ) from error
+
+# --------------------------------------------------
+# MULTICLASS SHAP EXPLANATION
+# --------------------------------------------------
+
+@router.post("/explain")
+def multiclass_explanation(
+    request: ExplanationRequest,
+):
+
+    try:
+
+        result = explain_prediction(
+
+            features=request.features,
+
+            top_n=request.top_n,
+
+            target_class=request.target_class,
+        )
+
+        return {
+
+            **result,
+
+            "source":
+                request.source,
+
+            "mode":
+                "explanation_only",
+
+            "incident_created":
+                False,
+
+            "response_executed":
+                False,
+        }
+
+    except ValueError as error:
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail=str(error),
+
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Multiclass explanation failed."
+        )
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail=(
+                "Multiclass explanation failed."
+            ),
+
+        ) from error
+
+# --------------------------------------------------
+# DEMONSTRATION DEVICE PROFILES
+# --------------------------------------------------
+
+@router.get("/device-profiles")
+def multiclass_device_profiles():
+
+    devices = list_device_profiles()
+
+    return {
+
+        "total_devices": len(devices),
+
+        "mode": "demonstration_only",
+
+        "devices": devices,
+    }
+
+
+# --------------------------------------------------
+# CONTEXT-AWARE RISK ASSESSMENT
+# --------------------------------------------------
+
+@router.post("/assess-risk")
+def multiclass_risk_assessment(
+
+    request: RiskAssessmentRequest,
+
+):
+
+    try:
+
+        result = assess_traffic_risk(
+
+            features=request.features,
+
+            device_id=request.device_id,
+        )
+
+        return {
+
+            **result,
+
+            "source": request.source,
+        }
+
+    except (ValueError, OverflowError) as error:
+
+        raise HTTPException(
+
+            status_code=422,
+
+            detail=str(error),
+
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+
+            "Context-aware risk assessment failed."
+        )
+
+        raise HTTPException(
+
+            status_code=500,
+
+            detail="Risk assessment failed.",
+
+        ) from error
+
+# --------------------------------------------------
+# RESPONSE POLICY INFORMATION
+# --------------------------------------------------
+
+@router.get("/response-policy")
+def response_policy_information():
+
+    return get_response_policy_info()
+
+
+# --------------------------------------------------
+# CONTROLLED RESPONSE PLANNING
+# --------------------------------------------------
+
+@router.post("/plan-response")
+def multiclass_response_planning(
+    request: RiskAssessmentRequest,
+):
+
+    try:
+
+        result = plan_traffic_response(
+            features=request.features,
+            device_id=request.device_id,
+        )
+
+        return {
+            **result,
+            "source": request.source,
+        }
+
+    except (ValueError, OverflowError) as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Controlled response planning failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Response planning failed.",
+        ) from error
+
+
+========================================
+FILE: backend/app/calibration_service.py
+========================================
+import math
+
+
+def calibrate_attack_probability(
+    raw_probability: float,
+    parameters: dict,
+) -> float:
+
+    probability = float(raw_probability)
+
+    if not math.isfinite(probability):
+        raise ValueError(
+            "Attack probability must be finite."
+        )
+
+    if not 0.0 <= probability <= 1.0:
+        raise ValueError(
+            "Attack probability must be between 0 and 1."
+        )
+
+    if parameters.get("method") != "sigmoid_on_logit":
+        raise ValueError(
+            "Unsupported calibration method."
+        )
+
+    coefficient = float(
+        parameters["coefficient"]
+    )
+
+    intercept = float(
+        parameters["intercept"]
+    )
+
+    epsilon = float(
+        parameters.get("epsilon", 1e-6)
+    )
+
+    if not all(
+        math.isfinite(value)
+        for value in [
+            coefficient,
+            intercept,
+            epsilon,
+        ]
+    ):
+        raise ValueError(
+            "Invalid calibration parameters."
+        )
+
+    if not 0 < epsilon < 0.5:
+        raise ValueError(
+            "Invalid calibration epsilon."
+        )
+
+    probability = min(
+        max(probability, epsilon),
+        1.0 - epsilon,
+    )
+
+    logit = math.log(
+        probability / (1.0 - probability)
+    )
+
+    z = coefficient * logit + intercept
+
+    # Numerically stable sigmoid.
+    if z >= 0:
+        return 1.0 / (
+            1.0 + math.exp(-z)
+        )
+
+    exp_z = math.exp(z)
+
+    return exp_z / (1.0 + exp_z)
+
+========================================
+FILE: backend/app/main.py
+========================================
+import json
+from datetime import datetime, timezone
+from typing import Literal
+from uuid import UUID
+from fastapi.encoders import jsonable_encoder
+import numpy as np
+import pandas as pd
+from .multiclass_router import router as multiclass_router
+from .response_lifecycle_router import router as response_lifecycle_router
+from .persistent_response_router import router as persistent_response_router
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    UploadFile,
+    File,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.middleware.cors import CORSMiddleware
+
+from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+
+from app.database import (
+    check_database_connection,
+    SessionLocal,
+)
+from .incident_management_router import (
+    router as incident_management_router,
+)
+
+from app.ml_service import (
+    EXPECTED_FEATURES,
+    predict_traffic,
+    predict_batch,
+)
+
+from .explainability_service import explain_prediction
+from app.ai_agent import IoTSecurityAgent
+app = FastAPI(
+    title="IoT Intrusion Detection API",
+    description="API for explainable IoT intrusion detection and incident response",
+    version="0.1.0",
+)
+
+app.include_router(multiclass_router)
+app.include_router(response_lifecycle_router)
+app.include_router(persistent_response_router)
+app.include_router(incident_management_router)
+# Reuse one agent instance for chatbot requests.
+assistant_agent = IoTSecurityAgent()
+
+# --------------------------------------------------
+# WEBSOCKET CONNECTION MANAGER
+# --------------------------------------------------
+
+class PredictionConnectionManager:
+
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        print(
+            f"WebSocket connected. Active clients: "
+            f"{len(self.active_connections)}"
+        )
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+        print(
+            f"WebSocket disconnected. Active clients: "
+            f"{len(self.active_connections)}"
+        )
+
+    async def broadcast(self, message: dict):
+        disconnected = []
+
+        for connection in self.active_connections.copy():
+            try:
+                await connection.send_json(message)
+            except Exception:
+                disconnected.append(connection)
+
+        for connection in disconnected:
+            self.disconnect(connection)
+
+
+prediction_manager = PredictionConnectionManager()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+def root():
+    return {
+        "message": "IoT Intrusion Detection API is running",
+        "docs": "/docs",
+    }
+
+
+@app.get("/api/health")
+def health():
+    return {
+        "status": "healthy",
+        "service": "iot-intrusion-detection-api",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+@app.get("/api/health/database")
+def database_health():
+    try:
+        check_database_connection()
+        return {
+            "status": "healthy",
+            "database": "connected",
+        }
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection failed. Check backend configuration.",
+        )
+
+class DeviceCreate(BaseModel):
+    device_name: str = Field(min_length=1, max_length=150)
+    device_identifier: str = Field(min_length=1, max_length=200)
+    device_type: str = Field(default="iot", max_length=100)
+    location: str | None = Field(default=None, max_length=200)
+    status: Literal["online", "offline", "unknown", "quarantined"] = "unknown"
+
+
+class DeviceResponse(BaseModel):
+    id: UUID
+    device_name: str
+    device_identifier: str
+    device_type: str
+    location: str | None
+    status: str
+    last_seen_at: datetime | None
+    created_at: datetime
+
+
+@app.post("/api/devices", response_model=DeviceResponse, status_code=201)
+def create_device(device: DeviceCreate):
+    try:
+        with SessionLocal() as db:
+            result = db.execute(
+                text("""
+                    INSERT INTO public.devices
+                        (device_name, device_identifier, device_type, location, status)
+                    VALUES
+                        (:device_name, :device_identifier, :device_type, :location, :status)
+                    RETURNING id, device_name, device_identifier, device_type,
+                              location, status, last_seen_at, created_at
+                """),
+                device.model_dump(),
+            )
+            row = result.mappings().one()
+            db.commit()
+            return dict(row)
+
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409,
+            detail="A device with this identifier already exists.",
+        )
+
+
+@app.get("/api/devices", response_model=list[DeviceResponse])
+def list_devices():
+    with SessionLocal() as db:
+        result = db.execute(
+            text("""
+                SELECT id, device_name, device_identifier, device_type,
+                       location, status, last_seen_at, created_at
+                FROM public.devices
+                ORDER BY created_at DESC
+            """)
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+class PredictionRequest(BaseModel):
+    features: dict[str, float]
+    device_id: UUID | None = None
+    source: Literal["csv_upload", "simulator", "device"] = "simulator"
+
+class ExplainRequest(BaseModel):
+    features: dict[str, float]
+    top_n: int = 10
+
+class AssistantChatRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+
+
+class IncidentStatusUpdate(BaseModel):
+    status: Literal[
+        "acknowledged",
+        "investigating",
+        "resolved",
+        "false_positive"
+    ]
+
+
+@app.post("/api/assistant/chat")
+def assistant_chat(request: AssistantChatRequest):
+    """Answer a question using the local IoT security agent."""
+    try:
+        response = assistant_agent.answer_question(request.question)
+        return response
+
+    except Exception as exc:
+        # Keep internal exception details out of the public API response.
+        print("Assistant chat endpoint error:", str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail="The assistant could not process this question."
+        ) from exc
+
+
+@app.post("/api/predictions")
+async def create_prediction(request: PredictionRequest):
+    # Step 1: Run the ML prediction
+    try:
+        result = predict_traffic(request.features)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
+
+    # Step 2: Save prediction and optionally create an incident
+    try:
+        with SessionLocal() as db:
+            row = db.execute(
+                text("""
+                    INSERT INTO public.predictions (
+                        device_id,
+                        predicted_label,
+                        attack_probability,
+                        risk_level,
+                        source,
+                        features,
+                        model_version
+                    )
+                    VALUES (
+                        :device_id,
+                        :predicted_label,
+                        :attack_probability,
+                        :risk_level,
+                        :source,
+                        CAST(:features AS jsonb),
+                        :model_version
+                    )
+                    RETURNING
+                        id,
+                        device_id,
+                        predicted_label,
+                        attack_probability,
+                        risk_level,
+                        source,
+                        model_version,
+                        created_at
+                """),
+                {
+                    "device_id": (
+                        str(request.device_id)
+                        if request.device_id
+                        else None
+                    ),
+                    "predicted_label": result["predicted_label"],
+                    "attack_probability": result["attack_probability"],
+                    "risk_level": result["risk_level"],
+                    "source": request.source,
+                    "features": json.dumps(request.features),
+                    "model_version": "random_forest_capture_based",
+                },
+            ).mappings().one()
+
+            # Step 3: Automatically create an incident
+            # when the risk level is HIGH or CRITICAL
+            incident_id = None
+
+            if result["risk_level"] in ("high", "critical"):
+                incident = db.execute(
+                    text("""
+                        INSERT INTO public.incidents (
+                            prediction_id,
+                            device_id,
+                            title,
+                            description,
+                            severity,
+                            status
+                        )
+                        VALUES (
+                            :prediction_id,
+                            :device_id,
+                            :title,
+                            :description,
+                            :severity,
+                            'open'
+                        )
+                        RETURNING id
+                    """),
+                    {
+                        "prediction_id": str(row["id"]),
+                        "device_id": (
+                            str(request.device_id)
+                            if request.device_id
+                            else None
+                        ),
+                        "title": (
+                            f"{result['risk_level'].upper()} "
+                            "IoT Security Alert"
+                        ),
+                        "description": (
+                            "The intrusion detection model detected "
+                            "an attack with "
+                            f"{result['attack_probability']:.2%} "
+                            "attack probability."
+                        ),
+                        "severity": result["risk_level"],
+                    },
+                ).mappings().one()
+
+                incident_id = str(incident["id"])
+
+            # Step 4: Commit prediction and incident together
+            db.commit()
+            response_data = {
+                 **dict(row),
+                 "prediction": result["prediction"],
+                 "incident_created": incident_id is not None,
+                 "incident_id": incident_id,
+                 }
+
+           # Step 5: Prepare prediction response
+           # Step 6: Broadcast the new prediction to connected clients
+            await prediction_manager.broadcast({
+                "event": "new_prediction",
+                "data": jsonable_encoder(response_data),
+                })
+            return response_data
+
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The supplied device ID is invalid, or a database "
+                "constraint was violated."
+            ),
+        ) from exc
+
+
+@app.get("/api/predictions")
+def get_predictions(
+    limit: int = Query(default=50, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    risk_level: str | None = None,
+    predicted_label: int | None = Query(default=None, ge=0, le=1),
+):
+    try:
+        with SessionLocal() as db:
+
+            # Query total number of matching predictions
+            count_query = text("""
+                SELECT COUNT(*)
+                FROM public.predictions
+                WHERE
+                    (
+                        CAST(:risk_level AS VARCHAR) IS NULL
+                        OR risk_level = CAST(:risk_level AS VARCHAR)
+                    )
+                    AND
+                    (
+                        CAST(:predicted_label AS SMALLINT) IS NULL
+                        OR predicted_label = CAST(:predicted_label AS SMALLINT)
+                    )
+            """)
+
+            total = db.execute(
+                count_query,
+                {
+                    "risk_level": risk_level,
+                    "predicted_label": predicted_label,
+                },
+            ).scalar_one()
+
+            # Retrieve prediction history
+            history_query = text("""
+                SELECT
+                    id,
+                    device_id,
+                    predicted_label,
+                    attack_probability,
+                    risk_level,
+                    source,
+                    model_version,
+                    created_at
+                FROM public.predictions
+                WHERE
+                    (
+                        CAST(:risk_level AS VARCHAR) IS NULL
+                        OR risk_level = CAST(:risk_level AS VARCHAR)
+                    )
+                    AND
+                    (
+                        CAST(:predicted_label AS SMALLINT) IS NULL
+                        OR predicted_label = CAST(:predicted_label AS SMALLINT)
+                    )
+                ORDER BY created_at DESC
+                LIMIT :limit OFFSET :offset
+            """)
+
+            rows = db.execute(
+                history_query,
+                {
+                    "risk_level": risk_level,
+                    "predicted_label": predicted_label,
+                    "limit": limit,
+                    "offset": offset,
+                },
+            ).mappings().all()
+
+            return {
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "items": [dict(row) for row in rows],
+            }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not retrieve prediction history: {str(e)}",
+        )
+
+
+@app.post("/api/explain")
+def explain_traffic(request: ExplainRequest):
+    try:
+        result = explain_prediction(
+            features=request.features,
+            top_n=request.top_n
+        )
+
+        return {
+            "status": "success",
+            "explanation": result
+        }
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"SHAP explanation failed: {str(e)}"
+        )
+
+        
+@app.get("/api/incidents")
+def get_incidents(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    status: str | None = None,
+):
+    try:
+        with SessionLocal() as db:
+
+            count_query = text("""
+                SELECT COUNT(*)
+                FROM public.incidents
+                WHERE (
+                    CAST(:status AS VARCHAR) IS NULL
+                    OR status = CAST(:status AS VARCHAR)
+                )
+            """)
+
+            total = db.execute(
+                count_query,
+                {"status": status},
+            ).scalar_one()
+
+            incidents_query = text("""
+                SELECT
+                    id,
+                    prediction_id,
+                    device_id,
+                    title,
+                    description,
+                    severity,
+                    status,
+                    assigned_to,
+                    resolved_at,
+                    created_at
+                FROM public.incidents
+                WHERE (
+                    CAST(:status AS VARCHAR) IS NULL
+                    OR status = CAST(:status AS VARCHAR)
+                )
+                ORDER BY created_at DESC
+                LIMIT :limit OFFSET :offset
+            """)
+
+            rows = db.execute(
+                incidents_query,
+                {
+                    "status": status,
+                    "limit": limit,
+                    "offset": offset,
+                },
+            ).mappings().all()
+
+            return {
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "items": [dict(row) for row in rows],
+            }
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not retrieve incidents: {str(exc)}",
+        ) from exc
+
+@app.patch("/api/incidents/{incident_id}/status")
+def update_incident_status(
+    incident_id: UUID,
+    request: IncidentStatusUpdate
+):
+    try:
+        with SessionLocal() as db:
+
+            # 1. Find and lock the incident
+            existing = db.execute(
+                text("""
+                    SELECT id, status
+                    FROM public.incidents
+                    WHERE id = :incident_id
+                    FOR UPDATE
+                """),
+                {"incident_id": str(incident_id)}
+            ).mappings().first()
+
+            if existing is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Incident not found."
+                )
+
+            old_status = existing["status"]
+            new_status = request.status
+
+            # 2. Update the incident status
+            updated = db.execute(
+                text("""
+                    UPDATE public.incidents
+                    SET
+                        status = :new_status,
+                        resolved_at = CASE
+                            WHEN :new_status = 'resolved'
+                            THEN CURRENT_TIMESTAMP
+                            ELSE NULL
+                        END
+                    WHERE id = :incident_id
+                    RETURNING
+                        id,
+                        prediction_id,
+                        device_id,
+                        title,
+                        severity,
+                        status,
+                        resolved_at,
+                        created_at
+                """),
+                {
+                    "incident_id": str(incident_id),
+                    "new_status": new_status
+                }
+            ).mappings().one()
+
+            # 3. Insert audit log
+            audit = db.execute(
+                text("""
+                    INSERT INTO public.incident_audit_logs (
+                        incident_id,
+                        action,
+                        details
+                    )
+                    VALUES (
+                        :incident_id,
+                        :action,
+                        CAST(:details AS jsonb)
+                    )
+                    RETURNING id, created_at
+                """),
+                {
+                    "incident_id": str(incident_id),
+                    "action": "status_changed",
+                    "details": json.dumps({
+                        "old_status": old_status,
+                        "new_status": new_status
+                    })
+                }
+            ).mappings().one()
+
+            # 4. Commit both operations together
+            db.commit()
+
+            return {
+                "message": "Incident status updated successfully.",
+                "incident": dict(updated),
+                "audit_log": {
+                    "id": str(audit["id"]),
+                    "action": "status_changed",
+                    "old_status": old_status,
+                    "new_status": new_status,
+                    "created_at": audit["created_at"]
+                }
+            }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not update incident: {str(exc)}"
+        ) from exc
+
+
+@app.post("/api/upload/csv")
+def upload_csv(file: UploadFile = File(...)):
+    """
+    Upload an IoT traffic CSV and perform batch intrusion detection.
+    Predictions and incidents are saved in a single database transaction.
+    """
+
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=400,
+            detail="Please upload a valid CSV file."
+        )
+
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
+    CHUNK_SIZE = 1000
+    MAX_ROWS = 500000
+
+    try:
+        # Check file size without loading the entire file into memory.
+        file.file.seek(0, 2)
+        file_size = file.file.tell()
+        file.file.seek(0)
+
+        if file_size == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded CSV file is empty."
+            )
+
+        if file_size > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="CSV file exceeds the 100 MB upload limit."
+            )
+
+        # Read only the CSV header first.
+        header = pd.read_csv(file.file, nrows=0, encoding="utf-8-sig")
+        file.file.seek(0)
+
+        if header.columns.duplicated().any():
+            raise HTTPException(
+                status_code=400,
+                detail="CSV contains duplicate column names."
+            )
+
+        uploaded_columns = list(header.columns)
+
+        missing_features = [
+            name for name in EXPECTED_FEATURES
+            if name not in uploaded_columns
+        ]
+
+        if missing_features:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "CSV is missing required model features.",
+                    "missing_features": missing_features
+                }
+            )
+
+        # These columns are not used by the ML model.
+        ignored_columns = {
+            "Number",
+            "Label",
+            "Telnet",
+            "SMTP"
+        }
+
+        unexpected_columns = [
+            name for name in uploaded_columns
+            if name not in EXPECTED_FEATURES
+            and name not in ignored_columns
+        ]
+
+        if unexpected_columns:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "CSV contains unsupported columns.",
+                    "unexpected_columns": unexpected_columns
+                }
+            )
+
+        summary = {
+            "total_records": 0,
+            "normal_records": 0,
+            "attack_records": 0,
+            "risk_distribution": {
+                "low": 0,
+                "medium": 0,
+                "high": 0,
+                "critical": 0
+            },
+            "incidents_created": 0
+        }
+
+        with SessionLocal() as db:
+            try:
+                # Process the CSV in chunks to control memory usage.
+                chunks = pd.read_csv(
+                    file.file,
+                    usecols=EXPECTED_FEATURES,
+                    chunksize=CHUNK_SIZE,
+                    encoding="utf-8-sig"
+                )
+
+                for chunk in chunks:
+
+                    if len(chunk) == 0:
+                        continue
+
+                    if summary["total_records"] + len(chunk) > MAX_ROWS:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="CSV exceeds the 500,000 record limit."
+                        )
+
+                    # Convert every feature to numeric.
+                    for column in EXPECTED_FEATURES:
+                        chunk[column] = pd.to_numeric(
+                            chunk[column],
+                            errors="coerce"
+                        )
+
+                    # Reject missing, invalid and infinite values.
+                    values = chunk[EXPECTED_FEATURES].to_numpy(
+                        dtype=float
+                    )
+
+                    if not np.isfinite(values).all():
+                        raise HTTPException(
+                            status_code=422,
+                            detail=(
+                                "CSV contains missing, non-numeric, "
+                                "or infinite feature values."
+                            )
+                        )
+
+                    # Run predictions for the complete chunk.
+                    predictions = predict_batch(
+                        chunk[EXPECTED_FEATURES]
+                    )
+
+                    # Save predictions and incidents.
+                    for (_, feature_row), result in zip(
+                        chunk.iterrows(),
+                        predictions
+                    ):
+                        features = {
+                            name: float(feature_row[name])
+                            for name in EXPECTED_FEATURES
+                        }
+
+                        prediction_row = db.execute(
+                            text("""
+                                INSERT INTO public.predictions (
+                                    device_id,
+                                    predicted_label,
+                                    attack_probability,
+                                    risk_level,
+                                    source,
+                                    features,
+                                    model_version
+                                )
+                                VALUES (
+                                    NULL,
+                                    :predicted_label,
+                                    :attack_probability,
+                                    :risk_level,
+                                    'csv_upload',
+                                    CAST(:features AS jsonb),
+                                    'random_forest_capture_based'
+                                )
+                                RETURNING id
+                            """),
+                            {
+                                "predicted_label": result["predicted_label"],
+                                "attack_probability": result["attack_probability"],
+                                "risk_level": result["risk_level"],
+                                "features": json.dumps(features)
+                            }
+                        ).mappings().one()
+
+                        summary["total_records"] += 1
+
+                        if result["predicted_label"] == 1:
+                            summary["attack_records"] += 1
+                        else:
+                            summary["normal_records"] += 1
+
+                        risk = result["risk_level"]
+                        summary["risk_distribution"][risk] += 1
+
+                        # Preserve the existing HIGH/CRITICAL incident rule.
+                        if risk in ("high", "critical"):
+                            db.execute(
+                                text("""
+                                    INSERT INTO public.incidents (
+                                        prediction_id,
+                                        device_id,
+                                        title,
+                                        description,
+                                        severity,
+                                        status
+                                    )
+                                    VALUES (
+                                        :prediction_id,
+                                        NULL,
+                                        :title,
+                                        :description,
+                                        :severity,
+                                        'open'
+                                    )
+                                """),
+                                {
+                                    "prediction_id": str(
+                                        prediction_row["id"]
+                                    ),
+                                    "title": (
+                                        f"{risk.upper()} "
+                                        "IoT Security Alert"
+                                    ),
+                                    "description": (
+                                        "CSV batch analysis detected "
+                                        "traffic with "
+                                        f"{result['attack_probability']:.2%} "
+                                        "attack probability."
+                                    ),
+                                    "severity": risk
+                                }
+                            )
+
+                            summary["incidents_created"] += 1
+
+                if summary["total_records"] == 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="The CSV does not contain any data records."
+                    )
+
+                # Commit all uploaded records together.
+                db.commit()
+
+            except Exception:
+                db.rollback()
+                raise
+
+        return {
+            "message": "CSV analysis completed successfully.",
+            "filename": file.filename,
+            **summary
+        }
+
+    except HTTPException:
+        raise
+
+    except (pd.errors.ParserError, UnicodeDecodeError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not parse the uploaded CSV file."
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"CSV processing failed: {str(exc)}"
+        ) from exc
+
+    finally:
+        file.file.close()
+# --------------------------------------------------
+# WEBSOCKET: LIVE PREDICTION CONNECTION
+# --------------------------------------------------
+
+@app.websocket("/ws/predictions")
+async def prediction_websocket(websocket: WebSocket):
+
+    await prediction_manager.connect(websocket)
+
+    try:
+        while True:
+            # Keep the connection alive and receive client messages.
+            await websocket.receive_text()
+
+    except WebSocketDisconnect:
+        prediction_manager.disconnect(websocket)
+
+========================================
+FILE: frontend/src/app/components/detection/detection.ts
+========================================
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  inject,
+  signal,
+  computed,
+  effect,
+} from '@angular/core';
+
+import { FormsModule } from '@angular/forms';
+import { DecimalPipe } from '@angular/common';
+
+import {
+  DeviceContextSelector,
+} from '../../shared/components/device-context-selector/device-context-selector';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize, TimeoutError } from 'rxjs';
+import { RiskAssessmentApiService } from '../../core/services/risk-assessment-api.service';
+import { DeviceContextService } from '../../core/services/device-context.service';
+import { RiskScore } from '../../shared/components/risk-score/risk-score';
+import { RiskContributions } from '../../shared/components/risk-contributions/risk-contributions';
+import type { RiskAssessmentResponse } from '../../core/models/risk-assessment.model';
+
+import {
+  MulticlassApiService,
+} from '../../core/services/multiclass-api.service';
+
+import {
+  NotificationService,
+} from '../../core/services/notification.service';
+
+import {
+  ATTACK_LABELS,
+} from '../../core/models/prediction.model';
+
+import type {
+  ModelInfo,
+  TrafficFeatures,
+
+} from '../../core/models/prediction.model';
+
+import {
+  getApiErrorMessage,
+} from '../../shared/utilities/api-error';
+
+@Component({
+  selector: 'app-detection',
+  standalone: true,
+  imports: [
+    FormsModule,
+    DecimalPipe,
+    DeviceContextSelector,
+    RiskScore,
+    RiskContributions,
+  ],
+  templateUrl: './detection.html',
+  styleUrl: './detection.scss',
+})
+export class Detection implements OnInit {
+
+  private readonly api = inject(MulticlassApiService);
+  private readonly riskApi = inject(RiskAssessmentApiService);
+  protected readonly context = inject(DeviceContextService);
+
+  private readonly notifications =
+    inject(NotificationService);
+
+  private readonly destroyRef = inject(DestroyRef);
+
+  protected readonly modelInfo =
+    signal<ModelInfo | null>(null);
+
+  protected readonly modelLoading = signal(false);
+
+  protected readonly modelError = signal('');
+
+  protected readonly submitting = signal(false);
+
+  protected readonly errorMessage = signal('');
+
+  private readonly assessmentState = signal<RiskAssessmentResponse | null>(null);
+  private readonly submittedContext = signal<string | null>(null);
+  protected readonly assessment = computed(() =>
+    this.submittedContext() === this.context.selectedDeviceId()
+      ? this.assessmentState() : null
+  );
+  protected readonly result = computed(() => this.assessment()?.prediction ?? null);
+
+  constructor() {
+    effect(() => {
+      const selected = this.context.selectedDeviceId();
+      if (selected !== this.submittedContext()) {
+        this.assessmentState.set(null);
+      }
+    });
+  }
+
+  protected readonly families =
+    Object.values(ATTACK_LABELS);
+
+  protected trafficJson = '';
+
+  protected readonly statusLabels: Record<string, string> = {
+    low_probability: 'Low attack probability',
+    suspicious: 'Suspicious traffic',
+    elevated_suspicion: 'Elevated suspicion',
+    high_confidence_attack: 'High-confidence attack',
+  };
+
+  protected readonly probabilityRows = computed(() => {
+
+    const prediction = this.result();
+
+    if (!prediction) {
+      return [];
+    }
+
+    return this.families.map(family => ({
+      family,
+      probability: prediction.class_probabilities[family],
+      predicted: prediction.predicted_family === family,
+    }));
+
+  });
+
+  protected readonly unsupportedClass = computed(() => {
+
+    const prediction = this.result();
+    const model = this.modelInfo();
+
+    if (!prediction || !model) {
+      return false;
+    }
+
+    return !model.validation_supported_labels.includes(
+      prediction.predicted_label
+    );
+
+  });
+
+  ngOnInit(): void {
+    this.loadModelInfo();
+  }
+
+  protected loadModelInfo(): void {
+
+    if (this.modelLoading() || this.submitting()) {
+      return;
+    }
+
+    this.modelLoading.set(true);
+    this.modelError.set('');
+    this.modelInfo.set(null);
+    this.assessmentState.set(null);
+
+    this.api.getModelInfo().pipe(
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.modelLoading.set(false))
+    ).subscribe({
+
+      next: info => {
+
+        if (
+          !Array.isArray(info.features) ||
+          info.feature_count !== 36 ||
+          info.features.length !== 36 ||
+          info.class_count !== 8
+        ) {
+          this.modelError.set(
+            'Unexpected model configuration.'
+          );
+          return;
+        }
+
+        this.modelInfo.set(info);
+
+      },
+
+      error: error => {
+        this.modelError.set(getApiErrorMessage(error));
+      },
+
+    });
+
+  }
+
+  protected loadTemplate(): void {
+
+    const model = this.modelInfo();
+
+    if (!model || this.submitting()) {
+      return;
+    }
+
+    const template = Object.fromEntries(
+      model.features.map(feature => [feature, null])
+    );
+
+    this.trafficJson = JSON.stringify(
+      template, null, 2
+    );
+
+    this.assessmentState.set(null);
+    this.errorMessage.set('');
+
+    this.notifications.info(
+      'Replace every null value with a measured numerical feature.',
+      'Feature template loaded'
+    );
+
+  }
+
+  protected clearInput(): void {
+
+    if (this.submitting()) {
+      return;
+    }
+
+    this.trafficJson = '';
+    this.errorMessage.set('');
+    this.assessmentState.set(null);
+
+  }
+
+  protected onInputChange(value: string): void {
+
+    this.trafficJson = value;
+    this.errorMessage.set('');
+    this.assessmentState.set(null);
+
+  }
+
+  private validateFeatures(): TrafficFeatures {
+
+    const model = this.modelInfo();
+
+    if (!model) {
+      throw new Error(
+        'Model information is unavailable.'
+      );
+    }
+
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(this.trafficJson);
+    } catch {
+      throw new Error(
+        'Invalid JSON. Enter a valid traffic feature object.'
+      );
+    }
+
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
+      throw new Error(
+        'Traffic features must be a JSON object.'
+      );
+    }
+
+    const input = parsed as Record<string, unknown>;
+
+    const missing = model.features.filter(
+      feature => !Object.prototype.hasOwnProperty.call(
+        input, feature
+      )
+    );
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing features: ${missing.join(', ')}`
+      );
+    }
+
+    const extra = Object.keys(input).filter(
+      feature => !model.features.includes(feature)
+    );
+
+    if (extra.length > 0) {
+      throw new Error(
+        `Unexpected features: ${extra.join(', ')}`
+      );
+    }
+
+    const invalid = model.features.filter(feature => {
+
+      const value = input[feature];
+
+      return (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        Math.abs(value) > 3.4028234663852886e38
+      );
+
+    });
+
+    if (invalid.length > 0) {
+      throw new Error(
+        `Invalid numerical values: ${invalid.join(', ')}`
+      );
+    }
+
+    const ordered = Object.fromEntries(
+      model.features.map(feature => [
+        feature,
+        input[feature],
+      ])
+    );
+
+    return ordered as unknown as TrafficFeatures;
+
+  }
+
+  protected detectTraffic(): void {
+
+    if (this.submitting() || !this.modelInfo() || this.context.loading()) {
+      return;
+    }
+
+    this.errorMessage.set('');
+    this.assessmentState.set(null);
+
+    let features: TrafficFeatures;
+
+    try {
+      features = this.validateFeatures();
+    } catch (error) {
+
+      this.errorMessage.set(
+        error instanceof Error
+          ? error.message
+          : 'Invalid traffic features.'
+      );
+
+      return;
+
+    }
+
+    const deviceId = this.context.selectedDeviceId();
+    this.submittedContext.set(deviceId);
+    this.submitting.set(true);
+
+    this.riskApi.assessRisk({
+      features,
+      device_id: deviceId,
+      source: 'manual',
+    }).pipe(
+
+      takeUntilDestroyed(this.destroyRef),
+
+      finalize(() => this.submitting.set(false))
+
+    ).subscribe({
+
+      next: response => {
+
+        if (deviceId !== this.context.selectedDeviceId()) {
+          this.errorMessage.set('Device context changed. Analyze again.');
+          return;
+        }
+
+        if (response.prediction.model_version !== this.modelInfo()?.model_version) {
+
+          this.errorMessage.set(
+            'Unexpected prediction response. Check the backend model and API contract.'
+          );
+
+          return;
+
+        }
+
+        this.assessmentState.set(response);
+        const prediction = response.prediction;
+
+        if (prediction.high_confidence_alert) {
+
+          this.notifications.warning(
+            `Predicted family: ${prediction.predicted_family}. Further assessment is recommended.`,
+            'High-confidence attack'
+          );
+
+        } else {
+
+          this.notifications.success(
+            'Multiclass prediction and risk assessment completed.',
+            'Analysis completed'
+          );
+
+        }
+
+      },
+
+      error: error => {
+
+        const message = error instanceof Error &&
+          error.message.startsWith('Invalid risk assessment response:')
+          ? error.message : getApiErrorMessage(error);
+        this.errorMessage.set(message);
+        if (error instanceof TimeoutError || message.startsWith('Invalid risk assessment response:')) {
+          this.notifications.error(message, 'Assessment failed');
+        }
+
+      },
+
+    });
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.html
+========================================
+<div class="detection-page">
+
+  <section class="detection-heading">
+
+    <div class="heading-icon">
+      <svg viewBox="0 0 24 24" width="28" height="28"
+           fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z"/>
+        <path d="M12 8v5m0 4h.01"/>
+      </svg>
+    </div>
+
+    <div>
+      <h2>Multiclass Intrusion Detection</h2>
+      <p>
+        Analyze network traffic using the calibrated
+        multiclass Random Forest model.
+      </p>
+    </div>
+
+  </section>
+
+  @if (modelLoading()) {
+
+    <div class="panel loading-panel" role="status">
+      <span class="spinner"></span>
+      Loading model information...
+    </div>
+
+  }
+
+  @if (modelError()) {
+
+    <div class="error-panel" role="alert">
+      <p>{{ modelError() }}</p>
+
+      <button type="button" class="secondary-button"
+              (click)="loadModelInfo()">
+        Retry
+      </button>
+    </div>
+
+  }
+
+  @if (modelInfo(); as model) {
+
+    <section class="model-grid">
+
+      <div class="metric-card">
+        <span>Classification classes</span>
+        <strong>{{ model.class_count }}</strong>
+      </div>
+
+      <div class="metric-card">
+        <span>Required features</span>
+        <strong>{{ model.feature_count }}</strong>
+      </div>
+
+      <div class="metric-card">
+        <span>High-confidence threshold</span>
+        <strong>
+          {{ model.high_confidence_threshold * 100 | number:'1.0-1' }}%
+        </strong>
+      </div>
+
+      <div class="metric-card">
+        <span>Probability calibration</span>
+        <strong class="green">
+          {{ model.calibrated ? 'Enabled' : 'Disabled' }}
+        </strong>
+      </div>
+
+    </section>
+
+    <section class="panel model-panel">
+
+      <h3>Model Information</h3>
+
+      <div class="metadata-grid">
+
+        <div>
+          <span>Algorithm</span>
+          <strong>{{ model.algorithm }}</strong>
+        </div>
+
+        <div>
+          <span>Model version</span>
+          <strong>{{ model.model_version }}</strong>
+        </div>
+
+        <div>
+          <span>Configuration</span>
+          <strong>{{ model.configuration }}</strong>
+        </div>
+
+        <div>
+          <span>Validation-supported classes</span>
+          <strong>
+            {{ model.validation_supported_labels.length }}
+            / {{ model.class_count }}
+          </strong>
+        </div>
+
+      </div>
+
+      <div class="family-list">
+        @for (family of families; track family) {
+          <span class="family-chip">{{ family }}</span>
+        }
+      </div>
+
+    </section>
+
+  }
+
+  <app-device-context-selector
+    [disabled]="submitting()">
+  </app-device-context-selector>
+
+  <div class="workspace">
+
+    <section class="panel input-panel">
+
+      <div class="panel-heading">
+        <h3>Network Traffic Input</h3>
+        <span class="mode-chip">Assessment only</span>
+      </div>
+
+      <p class="muted">
+        Enter a JSON object containing all 36 numerical
+        network traffic features.
+      </p>
+
+      <div class="button-row">
+
+        <button type="button" class="secondary-button"
+                (click)="loadTemplate()"
+                [disabled]="!modelInfo() || submitting()">
+          Load Feature Template
+        </button>
+
+        <button type="button" class="secondary-button"
+                (click)="clearInput()"
+                [disabled]="submitting()">
+          Clear
+        </button>
+
+      </div>
+
+      <label for="traffic-json">Traffic features (JSON)</label>
+
+      <textarea
+        id="traffic-json"
+        [ngModel]="trafficJson"
+        (ngModelChange)="onInputChange($event)"
+        [disabled]="submitting()"
+        placeholder="Paste network traffic features here..."
+        spellcheck="false"
+      ></textarea>
+
+      @if (errorMessage()) {
+        <div class="error-panel" role="alert">
+          {{ errorMessage() }}
+        </div>
+      }
+
+      <button
+        type="button"
+        class="primary-button"
+        (click)="detectTraffic()"
+        [disabled]="submitting() || !modelInfo() ||
+                    context.loading() || !trafficJson.trim()"
+      >
+
+        @if (submitting()) {
+          <span class="spinner"></span>
+          Analyzing Traffic...
+        } @else {
+          <svg viewBox="0 0 24 24" width="18" height="18"
+               fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round"
+               aria-hidden="true">
+            <circle cx="10" cy="10" r="6"/>
+            <path d="m15 15 6 6"/>
+          </svg>
+          Analyze Traffic
+        }
+
+      </button>
+
+      <p class="muted small">
+        This operation does not save a prediction,
+        create an incident or execute a response.
+      </p>
+
+    </section>
+
+    <section class="panel result-panel"
+             [attr.aria-busy]="submitting()">
+
+      <h3>Prediction Results</h3>
+
+      @if (submitting()) {
+
+        <div class="empty-state" role="status">
+          <span class="spinner large"></span>
+          <strong>Analyzing network traffic</strong>
+          <p>Waiting for classification and contextual risk assessment.</p>
+        </div>
+
+      } @else if (result(); as prediction) {
+
+        <div class="prediction-banner"
+             [class.benign]="prediction.predicted_family === 'Benign'">
+
+          <span>Predicted family</span>
+
+          <strong>{{ prediction.predicted_family }}</strong>
+
+          <span>
+            {{ statusLabels[prediction.detection_status] }}
+          </span>
+
+        </div>
+
+        @if (unsupportedClass()) {
+
+          <div class="warning-panel" role="status">
+            This class was not represented in the validation
+            split. Its predictive reliability has not been
+            established by that validation experiment.
+          </div>
+
+        }
+
+        <div class="result-metrics">
+
+          <div class="metric-card">
+            <span>Model confidence</span>
+            <strong>
+              {{ prediction.prediction_confidence * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Calibrated attack probability</span>
+            <strong>
+              {{ prediction.calibrated_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Raw attack probability</span>
+            <strong>
+              {{ prediction.raw_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Benign class probability</span>
+            <strong>
+              {{ prediction.benign_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+        </div>
+
+        <h4>Class Probability Distribution</h4>
+
+        <div class="probability-list">
+
+          @for (item of probabilityRows(); track item.family) {
+
+            <div class="probability-row">
+
+              <span class="probability-label">
+                {{ item.family }}
+              </span>
+
+              <div class="probability-track"
+                   role="meter"
+                   [attr.aria-label]="item.family + ' probability'"
+                   aria-valuemin="0"
+                   aria-valuemax="100"
+                   [attr.aria-valuenow]="item.probability * 100">
+
+                <div
+                  class="probability-fill"
+                  [class.predicted]="item.predicted"
+                  [class.normal]="item.family === 'Benign'"
+                  [style.width.%]="item.probability * 100">
+                </div>
+
+              </div>
+
+              <strong>
+                {{ item.probability * 100 | number:'1.2-2' }}%
+              </strong>
+
+            </div>
+
+          }
+
+        </div>
+
+        <div class="information-panel">
+
+          <strong>Probability interpretation</strong>
+
+          <p>
+            Individual family probabilities are uncalibrated.
+            Calibration applies only to the overall attack
+            versus benign probability.
+          </p>
+
+          @if (!prediction.calibration_independently_validated) {
+            <p>
+              Calibration has not yet been independently
+              evaluated on the held-out test set.
+            </p>
+          }
+
+        </div>
+
+        <div class="metadata-grid">
+
+          <div>
+            <span>Incident created</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Response executed</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Context-aware risk</span>
+            <strong>{{ assessment()?.risk_assessment?.risk_level }}</strong>
+          </div>
+
+          <div>
+            <span>Model version</span>
+            <strong>{{ prediction.model_version }}</strong>
+          </div>
+
+        </div>
+
+      } @else {
+
+        <div class="empty-state">
+
+          <svg viewBox="0 0 24 24" width="52" height="52"
+               fill="none" stroke="currentColor"
+               stroke-width="1.3" stroke-linecap="round"
+               aria-hidden="true">
+            <path d="M3 3v18h18M7 16v-4m5 4V7m5 9v-6"/>
+          </svg>
+
+          <strong>No prediction available</strong>
+
+          <p>
+            Enter valid network traffic features and
+            select Analyze Traffic.
+          </p>
+
+        </div>
+
+      }
+
+    </section>
+
+  </div>
+
+  @if (assessment(); as riskResult) {
+    <div class="risk-results">
+      <app-risk-score [result]="riskResult" />
+      <app-risk-contributions [result]="riskResult" />
+    </div>
+  }
+</div>
+
+
+========================================
+FILE: frontend/src/app/components/detection/detection.scss
+========================================
+:host {
+  display: block;
+  min-width: 0;
+  color: #e2e8f0;
+}
+
+.detection-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.detection-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.heading-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, .1);
+}
+
+h2, h3, h4 {
+  margin: 0;
+  color: #f1f5f9;
+}
+
+h2 { font-size: 23px; }
+h3 { font-size: 17px; }
+h4 { font-size: 14px; }
+
+p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.muted, .detection-heading p {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.small { font-size: 12px; }
+
+.model-grid,
+.metadata-grid,
+.result-metrics {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.model-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.panel, .metric-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #29384d;
+  border-radius: 14px;
+  background: #142033;
+}
+
+.metric-card {
+  display: grid;
+  gap: 9px;
+}
+
+.metric-card span,
+.metadata-grid span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.metric-card strong {
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+
+.green { color: #4ade80; }
+
+.metadata-grid {
+  margin-top: 16px;
+}
+
+.metadata-grid > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.metadata-grid strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.family-list, .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.family-chip, .mode-chip {
+  border: 1px solid #304158;
+  border-radius: 20px;
+  padding: 6px 10px;
+  color: #93c5fd;
+  font-size: 11px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+label {
+  display: block;
+  margin: 16px 0 8px;
+  font-size: 13px;
+}
+
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 380px;
+  padding: 14px;
+  resize: vertical;
+  border: 1px solid #34445c;
+  border-radius: 10px;
+  background: #0b1220;
+  color: #bfdbfe;
+  font: 13px/1.7 Consolas, monospace;
+}
+
+textarea:focus-visible, button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 10px 15px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.primary-button {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.secondary-button {
+  border: 1px solid #34445c;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.result-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.prediction-banner {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid #7f3945;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, .08);
+  color: #fca5a5;
+}
+
+.prediction-banner.benign {
+  border-color: #276749;
+  background: rgba(34, 197, 94, .08);
+  color: #86efac;
+}
+
+.prediction-banner strong {
+  font-size: 30px;
+  overflow-wrap: anywhere;
+}
+
+.result-metrics .metric-card {
+  background: #0b1220;
+  padding: 12px;
+}
+
+.result-metrics strong { font-size: 20px; }
+
+.probability-list {
+  display: grid;
+  gap: 12px;
+}
+
+.probability-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 62px;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.probability-row strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.probability-track {
+  height: 8px;
+  border-radius: 8px;
+  background: #29384d;
+  overflow: hidden;
+}
+
+.probability-fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: inherit;
+}
+
+.probability-fill.predicted { background: #ef4444; }
+.probability-fill.normal { background: #22c55e; }
+
+.empty-state {
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.error-panel,
+.warning-panel,
+.information-panel {
+  padding: 13px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.error-panel {
+  background: #3b202b;
+  color: #fca5a5;
+}
+
+.warning-panel {
+  background: #382e1c;
+  color: #fcd34d;
+}
+
+.information-panel {
+  background: #142c43;
+  color: #bfdbfe;
+}
+
+.loading-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 17px;
+  height: 17px;
+  border: 2px solid #64748b;
+  border-top-color: #38bdf8;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+.spinner.large {
+  width: 42px;
+  height: 42px;
+  border-width: 3px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1200px) {
+  .model-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 600px) {
+  .detection-page { gap: 14px; }
+  .panel { padding: 14px; }
+  .metric-card { padding: 12px; }
+  h2 { font-size: 18px; }
+  textarea { min-height: 300px; }
+  .metadata-grid { grid-template-columns: minmax(0, 1fr); }
+  .probability-row {
+    grid-template-columns: 95px minmax(0, 1fr) 55px;
+    gap: 5px;
+  }
+  .metric-card strong { font-size: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+/* Phase 11.5.9 responsive refinement */
+.detection-page { gap: 14px; }
+.panel, .metric-card { padding: 14px; }
+textarea { min-height: 220px; height: clamp(220px, 34vh, 340px); }
+.empty-state { min-height: 180px; padding: 16px 0; }
+.metadata-grid, .family-list, .button-row { margin-top: 12px; }
+@media (max-width: 600px) {
+  .detection-heading { align-items: flex-start; gap: 10px; }
+  .heading-icon { width: 40px; height: 40px; }
+  .metric-card { padding: 10px; }
+  .result-metrics { grid-template-columns: minmax(0,1fr); }
+  .probability-row { grid-template-columns: 90px minmax(0,1fr) 52px; }
+  textarea { min-height: 200px; }
+}
+
+.risk-results { display: grid; gap: 20px; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+
+
+========================================
+FILE: frontend/src/app/core/models/risk-assessment.model.ts
+========================================
+import type {
+  AttackFamily,
+  MulticlassPrediction,
+  RiskLevel,
+  TrafficFeatures,
+} from './prediction.model';
+
+export type MaliciousAttackFamily =
+  Exclude<AttackFamily, 'Benign'>;
+
+
+// --------------------------------------------------
+// RISK ASSESSMENT REQUEST
+// --------------------------------------------------
+
+export interface RiskAssessmentRequest {
+
+  features: TrafficFeatures;
+
+  device_id?: string | null;
+
+  source?: string;
+
+}
+
+
+// --------------------------------------------------
+// DEVICE SECURITY CONTEXT
+// --------------------------------------------------
+
+export interface RiskDeviceContext {
+
+  device_id: string | null;
+
+  requested_device_id?: string | null;
+
+  device_name: string;
+
+  device_type: string;
+
+  criticality: number;
+
+  exposure: number;
+
+  business_function: string;
+
+  containment_allowed: boolean;
+
+  context_known: boolean;
+
+  context_source:
+    | 'demonstration_inventory'
+    | 'unknown_device_fallback';
+
+  identity_verified: false;
+
+  simulation_only: true;
+
+}
+
+
+// --------------------------------------------------
+// ATTACK IMPACT CONTRIBUTION
+// --------------------------------------------------
+
+export interface AttackImpactContribution {
+
+  attack_family: MaliciousAttackFamily;
+
+  class_probability: number;
+
+  conditional_probability: number;
+
+  impact_score: number;
+
+  weighted_contribution: number;
+
+}
+
+
+// --------------------------------------------------
+// EXPECTED ATTACK IMPACT
+// --------------------------------------------------
+
+export interface AttackImpactAssessment {
+
+  expected_impact: number;
+
+  raw_attack_probability: number;
+
+  impact_contributions: AttackImpactContribution[];
+
+  impact_available: boolean;
+
+  impact_policy_version: string;
+
+  class_probabilities_calibrated?: false;
+
+}
+
+
+// --------------------------------------------------
+// RISK FACTORS
+// --------------------------------------------------
+
+export interface RiskFactors {
+
+  criticality: number;
+
+  attack_impact: number;
+
+  exposure: number;
+
+}
+
+
+// --------------------------------------------------
+// RISK WEIGHTS
+// --------------------------------------------------
+
+export interface RiskWeights {
+
+  criticality: number;
+
+  attack_impact: number;
+
+  exposure: number;
+
+}
+
+
+// --------------------------------------------------
+// RISK CONTRIBUTIONS
+// --------------------------------------------------
+
+export interface RiskContributions {
+
+  criticality: number;
+
+  attack_impact: number;
+
+  exposure: number;
+
+}
+
+
+// --------------------------------------------------
+// RISK RECONSTRUCTION
+// --------------------------------------------------
+
+export interface RiskReconstruction {
+
+  contribution_sum: number;
+
+  error: number;
+
+  passed: boolean;
+
+}
+
+
+// --------------------------------------------------
+// RECOMMENDED ACTIONS
+// --------------------------------------------------
+
+export type RiskRecommendedAction =
+  | 'priority_investigation'
+  | 'alert_and_investigate'
+  | 'review_suspicious_activity'
+  | 'monitor_suspicious_activity'
+  | 'monitor_and_verify_device'
+  | 'record_and_monitor';
+
+
+// --------------------------------------------------
+// COMPLETE RISK ASSESSMENT
+// --------------------------------------------------
+
+export interface RiskAssessment {
+
+  risk_policy_version: string;
+
+  risk_score: number;
+
+  risk_level: RiskLevel;
+
+  attack_probability: number;
+
+  device_context: RiskDeviceContext;
+
+  attack_impact: AttackImpactAssessment;
+
+  risk_factors: RiskFactors;
+
+  risk_weights: RiskWeights;
+
+  risk_contributions: RiskContributions;
+
+  risk_reconstruction: RiskReconstruction;
+
+  recommended_action: RiskRecommendedAction;
+
+  requires_device_verification: boolean;
+
+  containment_authorized: false;
+
+  response_executed: false;
+
+  warnings: string[];
+
+}
+
+
+// --------------------------------------------------
+// COMPLETE API RESPONSE
+// --------------------------------------------------
+
+export interface RiskAssessmentResponse {
+
+  prediction: MulticlassPrediction;
+
+  risk_assessment: RiskAssessment;
+
+  mode: 'risk_assessment_only';
+
+  incident_created: false;
+
+  response_executed: false;
+
+  source: string;
+
+}
+
+
+// --------------------------------------------------
+// DISPLAY LABELS
+// --------------------------------------------------
+
+export const RISK_LEVEL_LABELS:
+  Record<RiskLevel, string> = {
+
+  low: 'Low',
+
+  medium: 'Medium',
+
+  high: 'High',
+
+  critical: 'Critical',
+
+};
+
+
+export const RISK_ACTION_LABELS:
+  Record<RiskRecommendedAction, string> = {
+
+  priority_investigation:
+    'Priority investigation',
+
+  alert_and_investigate:
+    'Alert and investigate',
+
+  review_suspicious_activity:
+    'Review suspicious activity',
+
+  monitor_suspicious_activity:
+    'Monitor suspicious activity',
+
+  monitor_and_verify_device:
+    'Monitor and verify device',
+
+  record_and_monitor:
+    'Record and monitor',
+
+};
+
+
+========================================
+FILE: frontend/src/app/core/services/risk-assessment-api.service.ts
+========================================
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+
+import {
+  Observable,
+  map,
+  timeout,
+} from 'rxjs';
+
+import { environment } from '../../../environments/environment';
+
+import { API_ENDPOINTS } from '../config/api-endpoints';
+
+import { ATTACK_LABELS } from '../models/prediction.model';
+
+import {
+  RISK_ACTION_LABELS,
+  type RiskAssessmentRequest,
+  type RiskAssessmentResponse,
+} from '../models/risk-assessment.model';
+
+
+const EPSILON = 1e-6;
+
+const RISK_KEYS = [
+  'criticality',
+  'attack_impact',
+  'exposure',
+] as const;
+
+
+// --------------------------------------------------
+// VALIDATION HELPERS
+// --------------------------------------------------
+
+function requireValid(
+  condition: unknown,
+  message: string,
+): asserts condition {
+
+  if (!condition) {
+
+    throw new Error(
+      `Invalid risk assessment response: ${message}`
+    );
+
+  }
+
+}
+
+
+function asObject(
+  value: unknown,
+  name: string,
+): Record<string, unknown> {
+
+  requireValid(
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value),
+    `${name} must be an object`,
+  );
+
+  return value as Record<string, unknown>;
+
+}
+
+
+function asNumber(
+  value: unknown,
+  name: string,
+  max = 1,
+): number {
+
+  requireValid(
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= max + EPSILON,
+    `${name} is outside its valid range`,
+  );
+
+  return value;
+
+}
+
+
+function asText(
+  value: unknown,
+  name: string,
+): string {
+
+  requireValid(
+    typeof value === 'string' &&
+    value.trim().length > 0,
+    `${name} must be a non-empty string`,
+  );
+
+  return value;
+
+}
+
+
+function near(
+  actual: number,
+  expected: number,
+  name: string,
+): void {
+
+  requireValid(
+    Math.abs(actual - expected) <= EPSILON,
+    `${name} is inconsistent`,
+  );
+
+}
+
+
+// --------------------------------------------------
+// RISK RESPONSE VALIDATION
+// --------------------------------------------------
+
+export function validateRiskAssessmentResponse(
+  value: unknown,
+  request: RiskAssessmentRequest,
+): RiskAssessmentResponse {
+
+  const response = asObject(value, 'response');
+
+  const prediction = asObject(
+    response['prediction'],
+    'prediction',
+  );
+
+  const risk = asObject(
+    response['risk_assessment'],
+    'risk_assessment',
+  );
+
+  const context = asObject(
+    risk['device_context'],
+    'device_context',
+  );
+
+  const impact = asObject(
+    risk['attack_impact'],
+    'attack_impact',
+  );
+
+  const factors = asObject(
+    risk['risk_factors'],
+    'risk_factors',
+  );
+
+  const weights = asObject(
+    risk['risk_weights'],
+    'risk_weights',
+  );
+
+  const contributions = asObject(
+    risk['risk_contributions'],
+    'risk_contributions',
+  );
+
+  const reconstruction = asObject(
+    risk['risk_reconstruction'],
+    'risk_reconstruction',
+  );
+
+
+  // ------------------------------------------------
+  // RESPONSE MODE AND SAFETY
+  // ------------------------------------------------
+
+  requireValid(
+    response['mode'] === 'risk_assessment_only',
+    'unexpected response mode',
+  );
+
+  requireValid(
+    response['incident_created'] === false &&
+    response['response_executed'] === false &&
+    risk['response_executed'] === false &&
+    risk['containment_authorized'] === false,
+    'assessment-only safety contract violated',
+  );
+
+  requireValid(
+    context['identity_verified'] === false &&
+    context['simulation_only'] === true &&
+    risk['requires_device_verification'] === true,
+    'device safety contract violated',
+  );
+
+  requireValid(
+    response['source'] === (request.source ?? 'manual'),
+    'response source mismatch',
+  );
+
+
+  // ------------------------------------------------
+  // PREDICTION VALIDATION
+  // ------------------------------------------------
+
+  const families = Object.values(ATTACK_LABELS);
+
+  const label = prediction['predicted_label'];
+
+  requireValid(
+    typeof label === 'number' &&
+    Number.isInteger(label) &&
+    label >= 0 &&
+    label <= 7,
+    'invalid predicted label',
+  );
+
+  const family = prediction['predicted_family'];
+
+  requireValid(
+    family === ATTACK_LABELS[
+      label as keyof typeof ATTACK_LABELS
+    ],
+    'predicted family does not match label',
+  );
+
+  requireValid(
+    prediction['prediction'] ===
+      (label === 0 ? 'normal' : 'attack'),
+    'prediction type does not match label',
+  );
+
+  const probabilities = asObject(
+    prediction['class_probabilities'],
+    'class_probabilities',
+  );
+
+  requireValid(
+    Object.keys(probabilities).length === families.length,
+    'unexpected class probability count',
+  );
+
+  let probabilitySum = 0;
+  let rawAttackMass = 0;
+
+  for (const attackFamily of families) {
+
+    const probability = asNumber(
+      probabilities[attackFamily],
+      attackFamily,
+    );
+
+    probabilitySum += probability;
+
+    if (attackFamily !== 'Benign') {
+      rawAttackMass += probability;
+    }
+
+  }
+
+  near(probabilitySum, 1, 'class probability sum');
+
+  const confidence = asNumber(
+    prediction['prediction_confidence'],
+    'prediction confidence',
+  );
+
+  near(
+    confidence,
+    asNumber(probabilities[String(family)], 'family probability'),
+    'prediction confidence',
+  );
+
+  const candidate = prediction['candidate_attack_family'];
+
+  requireValid(
+    families.some(f => f !== 'Benign' && f === candidate),
+    'invalid candidate attack family',
+  );
+
+  near(
+    asNumber(
+      prediction['candidate_attack_probability'],
+      'candidate attack probability',
+    ),
+    asNumber(probabilities[String(candidate)], 'candidate probability'),
+    'candidate attack probability',
+  );
+
+  near(
+    asNumber(prediction['benign_probability'], 'benign probability'),
+    asNumber(probabilities['Benign'], 'Benign'),
+    'benign probability',
+  );
+
+  near(
+    asNumber(prediction['raw_attack_probability'], 'raw attack probability'),
+    rawAttackMass,
+    'raw attack probability',
+  );
+
+  const probability = asNumber(
+    prediction['calibrated_attack_probability'],
+    'calibrated attack probability',
+  );
+
+  near(
+    asNumber(prediction['attack_probability'], 'attack probability'),
+    probability,
+    'prediction attack probability',
+  );
+
+  near(
+    asNumber(risk['attack_probability'], 'risk attack probability'),
+    probability,
+    'risk attack probability',
+  );
+
+  requireValid(
+    prediction['class_probabilities_calibrated'] === false &&
+    prediction['calibration_independently_validated'] === false &&
+    prediction['calibration_scope'] === 'binary_attack_probability',
+    'unexpected calibration metadata',
+  );
+
+  asText(prediction['model_version'], 'model version');
+
+  const expectedDetectionStatus =
+    probability >= 0.90 ? 'high_confidence_attack' :
+    probability >= 0.75 ? 'elevated_suspicion' :
+    probability >= 0.50 ? 'suspicious' :
+    'low_probability';
+
+  requireValid(
+    prediction['detection_status'] === expectedDetectionStatus &&
+    prediction['high_confidence_alert'] === (probability >= 0.90),
+    'inconsistent detection status',
+  );
+
+  near(
+    asNumber(prediction['alert_threshold'], 'alert threshold'),
+    0.90,
+    'alert threshold',
+  );
+
+
+  // ------------------------------------------------
+  // DEVICE CONTEXT VALIDATION
+  // ------------------------------------------------
+
+  const criticality = asNumber(
+    context['criticality'],
+    'device criticality',
+  );
+
+  const exposure = asNumber(
+    context['exposure'],
+    'device exposure',
+  );
+
+  asText(context['device_name'], 'device name');
+  asText(context['device_type'], 'device type');
+  asText(context['business_function'], 'business function');
+
+  requireValid(
+    typeof context['context_known'] === 'boolean' &&
+    typeof context['containment_allowed'] === 'boolean',
+    'invalid device context flags',
+  );
+
+  if (context['context_known'] === true) {
+
+    requireValid(
+      typeof context['device_id'] === 'string' &&
+      context['device_id'] === request.device_id &&
+      context['context_source'] === 'demonstration_inventory',
+      'selected device context mismatch',
+    );
+
+  } else {
+
+    requireValid(
+      context['device_id'] === null &&
+      context['requested_device_id'] === (request.device_id ?? null) &&
+      context['context_source'] === 'unknown_device_fallback' &&
+      context['containment_allowed'] === false,
+      'invalid unknown-device fallback',
+    );
+
+    near(criticality, 0.50, 'fallback criticality');
+    near(exposure, 0.50, 'fallback exposure');
+
+  }
+
+
+  // ------------------------------------------------
+  // EXPECTED ATTACK IMPACT
+  // ------------------------------------------------
+
+  const expectedImpact = asNumber(
+    impact['expected_impact'],
+    'expected attack impact',
+  );
+
+  requireValid(
+    impact['impact_policy_version'] === 'attack_impact_v1',
+    'unsupported attack impact policy',
+  );
+
+  near(
+    asNumber(impact['raw_attack_probability'], 'impact attack mass'),
+    rawAttackMass,
+    'impact attack mass',
+  );
+
+  const impactRows = impact['impact_contributions'];
+
+  requireValid(
+    Array.isArray(impactRows),
+    'impact contributions must be an array',
+  );
+
+  if (rawAttackMass <= 1e-12) {
+
+    requireValid(
+      impact['impact_available'] === false &&
+      impactRows.length === 0,
+      'invalid unavailable-impact response',
+    );
+
+    near(expectedImpact, 0, 'unavailable attack impact');
+
+  } else {
+
+    requireValid(
+      impact['impact_available'] === true &&
+      impact['class_probabilities_calibrated'] === false &&
+      impactRows.length === 7,
+      'invalid attack impact metadata',
+    );
+
+    const seen = new Set<string>();
+
+    let impactSum = 0;
+    let conditionalSum = 0;
+
+    for (const item of impactRows) {
+
+      const row = asObject(item, 'impact contribution');
+
+      const attackFamily = asText(
+        row['attack_family'],
+        'impact attack family',
+      );
+
+      requireValid(
+        families.some(f => f !== 'Benign' && f === attackFamily) &&
+        !seen.has(attackFamily),
+        'invalid or duplicate impact family',
+      );
+
+      seen.add(attackFamily);
+
+      const classProbability = asNumber(
+        row['class_probability'],
+        'impact class probability',
+      );
+
+      const conditional = asNumber(
+        row['conditional_probability'],
+        'conditional probability',
+      );
+
+      const impactScore = asNumber(
+        row['impact_score'],
+        'family impact score',
+      );
+
+      const weighted = asNumber(
+        row['weighted_contribution'],
+        'weighted impact contribution',
+      );
+
+      near(
+        classProbability,
+        asNumber(probabilities[attackFamily], attackFamily),
+        'impact class probability',
+      );
+
+      near(
+        conditional,
+        classProbability / rawAttackMass,
+        'conditional attack probability',
+      );
+
+      near(
+        weighted,
+        conditional * impactScore,
+        'weighted attack impact',
+      );
+
+      conditionalSum += conditional;
+      impactSum += weighted;
+
+    }
+
+    near(conditionalSum, 1, 'conditional probability sum');
+    near(impactSum, expectedImpact, 'expected attack impact');
+
+  }
+
+
+  // ------------------------------------------------
+  // RISK CALCULATION VALIDATION
+  // ------------------------------------------------
+
+  requireValid(
+    risk['risk_policy_version'] === 'context_risk_v1',
+    'unsupported risk policy',
+  );
+
+  const score = asNumber(
+    risk['risk_score'],
+    'risk score',
+    100,
+  );
+
+  const expectedLevel =
+    score >= 75 ? 'critical' :
+    score >= 50 ? 'high' :
+    score >= 25 ? 'medium' :
+    'low';
+
+  requireValid(
+    risk['risk_level'] === expectedLevel,
+    'risk level does not match score',
+  );
+
+  const expectedFactors = {
+    criticality,
+    attack_impact: expectedImpact,
+    exposure,
+  };
+
+  const expectedWeights = {
+    criticality: 0.40,
+    attack_impact: 0.40,
+    exposure: 0.20,
+  };
+
+  let reconstructedScore = 0;
+
+  for (const key of RISK_KEYS) {
+
+    const factor = asNumber(
+      factors[key],
+      `${key} factor`,
+    );
+
+    const weight = asNumber(
+      weights[key],
+      `${key} weight`,
+    );
+
+    const contribution = asNumber(
+      contributions[key],
+      `${key} contribution`,
+      100,
+    );
+
+    near(factor, expectedFactors[key], `${key} factor`);
+
+    near(weight, expectedWeights[key], `${key} weight`);
+
+    near(
+      contribution,
+      100 * probability * weight * factor,
+      `${key} contribution`,
+    );
+
+    reconstructedScore += contribution;
+
+  }
+
+  near(reconstructedScore, score, 'risk score reconstruction');
+
+  near(
+    asNumber(reconstruction['contribution_sum'], 'contribution sum', 100),
+    reconstructedScore,
+    'reported contribution sum',
+  );
+
+  const reconstructionError = asNumber(
+    reconstruction['error'],
+    'reconstruction error',
+    100,
+  );
+
+  requireValid(
+    reconstruction['passed'] === true &&
+    reconstructionError <= 1e-8,
+    'backend risk reconstruction failed',
+  );
+
+
+  // ------------------------------------------------
+  // RECOMMENDATIONS AND WARNINGS
+  // ------------------------------------------------
+
+  const action = asText(
+    risk['recommended_action'],
+    'recommended action',
+  );
+
+  requireValid(
+    Object.prototype.hasOwnProperty.call(
+      RISK_ACTION_LABELS,
+      action,
+    ),
+    'unsupported recommended action',
+  );
+
+  const warnings = risk['warnings'];
+
+  requireValid(
+    Array.isArray(warnings) &&
+    warnings.every(
+      warning =>
+        typeof warning === 'string' &&
+        warning.trim().length > 0,
+    ),
+    'invalid risk warnings',
+  );
+
+  return value as RiskAssessmentResponse;
+
+}
+
+
+// --------------------------------------------------
+// ANGULAR HTTP SERVICE
+// --------------------------------------------------
+
+@Injectable({
+  providedIn: 'root',
+})
+export class RiskAssessmentApiService {
+
+  private readonly http = inject(HttpClient);
+
+
+  assessRisk(
+    request: RiskAssessmentRequest,
+  ): Observable<RiskAssessmentResponse> {
+
+    return this.http.post<unknown>(
+
+      API_ENDPOINTS.risk.assess,
+
+      request,
+
+    ).pipe(
+
+      timeout(environment.analysisTimeoutMs),
+
+      map(response =>
+        validateRiskAssessmentResponse(response, request)
+      ),
+
+    );
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/core/services/device-context.service.ts
+========================================
+import {
+  Injectable,
+  inject,
+  signal,
+  computed,
+} from '@angular/core';
+
+import { finalize } from 'rxjs';
+
+import { DeviceApiService } from './device-api.service';
+
+import type {
+  DeviceContextProfile,
+} from '../models/device.model';
+
+import {
+  getApiErrorMessage,
+} from '../../shared/utilities/api-error';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class DeviceContextService {
+
+  private readonly api = inject(DeviceApiService);
+
+  private readonly profileState =
+    signal<DeviceContextProfile[]>([]);
+
+  private readonly selectedIdState =
+    signal<string | null>(null);
+
+  private readonly loadingState = signal(false);
+
+  private readonly loadedState = signal(false);
+
+  private readonly errorState = signal('');
+
+  readonly profiles = this.profileState.asReadonly();
+
+  readonly selectedDeviceId =
+    this.selectedIdState.asReadonly();
+
+  readonly loading = this.loadingState.asReadonly();
+
+  readonly loaded = this.loadedState.asReadonly();
+
+  readonly error = this.errorState.asReadonly();
+
+  readonly selectedProfile = computed(() => {
+
+    const selectedId = this.selectedIdState();
+
+    return this.profileState().find(
+      profile => profile.device_id === selectedId
+    ) ?? null;
+
+  });
+
+  readonly totalProfiles = computed(
+    () => this.profileState().length
+  );
+
+  readonly restrictedProfiles = computed(
+    () => this.profileState().filter(
+      profile => !profile.containment_allowed
+    ).length
+  );
+
+  readonly verifiedProfiles = computed(
+    () => this.profileState().filter(
+      profile => profile.identity_verified
+    ).length
+  );
+
+  loadProfiles(force = false): void {
+
+    if (
+      this.loadingState() ||
+      (this.loadedState() && !force)
+    ) {
+      return;
+    }
+
+    this.loadingState.set(true);
+    this.errorState.set('');
+
+    this.api.getDeviceProfiles().pipe(
+
+      finalize(() => this.loadingState.set(false))
+
+    ).subscribe({
+
+      next: response => {
+
+        this.profileState.set(response.devices);
+        this.loadedState.set(true);
+
+        const selectedId = this.selectedIdState();
+
+        if (
+          selectedId !== null &&
+          !response.devices.some(
+            profile => profile.device_id === selectedId
+          )
+        ) {
+          this.selectedIdState.set(null);
+        }
+
+      },
+
+      error: error => {
+
+        this.profileState.set([]);
+        this.selectedIdState.set(null);
+        this.loadedState.set(false);
+
+        this.errorState.set(
+          getApiErrorMessage(error)
+        );
+
+      },
+
+    });
+
+  }
+
+  selectDevice(deviceId: string | null): boolean {
+
+    if (deviceId === null) {
+
+      this.selectedIdState.set(null);
+
+      return true;
+
+    }
+
+    if (
+      this.loadingState() ||
+      !this.loadedState() ||
+      !this.profileState().some(
+        profile => profile.device_id === deviceId
+      )
+    ) {
+      return false;
+    }
+
+    this.selectedIdState.set(deviceId);
+
+    return true;
+
+  }
+
+  clearSelection(): void {
+
+    this.selectedIdState.set(null);
+
+  }
+
+}
+
+
+========================================
+FILE: frontend/src/app/core/config/api-endpoints.ts
+========================================
+import { environment } from '../../../environments/environment';
+
+const BASE = environment.apiBaseUrl;
+const MC = `${BASE}/api/multiclass`;
+const INC = `${MC}/incidents`;
+const PR = `${BASE}/api/persistent-responses`;
+const RES = `${BASE}/api/responses`;
+
+const id = (value: string) => encodeURIComponent(value);
+
+export const API_ENDPOINTS = {
+
+  health: `${BASE}/api/health`,
+  databaseHealth: `${BASE}/api/health/database`,
+
+  model: {
+    info: `${MC}/model-info`,
+    predict: `${MC}/predict`,
+    predictBatch: `${MC}/predict-batch`,
+    explain: `${MC}/explain`,
+  },
+
+  devices: {
+    list: `${BASE}/api/devices`,
+    create: `${BASE}/api/devices`,
+    profiles: `${MC}/device-profiles`,
+  },
+
+  risk: {
+    assess: `${MC}/assess-risk`,
+  },
+
+  incidents: {
+    info: `${INC}/info`,
+    list: INC,
+    summary: `${INC}/summary`,
+    detail: (value: string) => `${INC}/${id(value)}`,
+    audit: (value: string) => `${INC}/${id(value)}/audit`,
+    status: (value: string) => `${INC}/${id(value)}/status`,
+  },
+
+  persistentResponses: {
+    info: `${PR}/info`,
+    list: PR,
+    create: PR,
+    detail: (value: string) => `${PR}/${id(value)}`,
+    audit: (value: string) => `${PR}/${id(value)}/audit`,
+  },
+
+  responsePolicy: {
+    info: `${MC}/response-policy`,
+    plan: `${MC}/plan-response`,
+  },
+
+  simulation: {
+    info: `${RES}/info`,
+    create: RES,
+    detail: (value: string) => `${RES}/${id(value)}`,
+    audit: (value: string) => `${RES}/${id(value)}/audit`,
+  },
+
+  legacy: {
+    predictions: `${BASE}/api/predictions`,
+    incidents: `${BASE}/api/incidents`,
+    explain: `${BASE}/api/explain`,
+    csvUpload: `${BASE}/api/upload/csv`,
+    assistant: `${BASE}/api/assistant/chat`,
+    websocket: `${environment.websocketBaseUrl}/ws/predictions`,
+  },
+
+} as const;
+

@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal, DestroyRef } from '@angular/core';
 
+import { Title } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { Api, Device, DashboardAnalytics } from '../../services/api';
@@ -39,6 +40,8 @@ export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'an
 })
 export class Dashboard implements OnInit {
   private readonly api = inject(Api);
+  private readonly browserTitle = inject(Title);
+  protected readonly menuOpen = signal(false);
 
   private readonly predictionWebSocket = inject(PredictionWebSocket);
 
@@ -68,6 +71,7 @@ export class Dashboard implements OnInit {
   // --------------------------------------------------
 
   ngOnInit(): void {
+    this.browserTitle.setTitle(`${this.getPageTitle()} | IoT Sentinel`);
     this.loadDevices();
     this.loadAnalytics();
     this.connectPredictionWebSocket();
@@ -79,6 +83,8 @@ export class Dashboard implements OnInit {
 
   protected navigateTo(view: DashboardView): void {
     this.activeView.set(view);
+    this.menuOpen.set(false);
+    this.browserTitle.setTitle(`${this.getPageTitle()} | IoT Sentinel`);
   }
 
   protected isActive(view: DashboardView): boolean {

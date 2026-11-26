@@ -1,0 +1,60 @@
+﻿.global-loading-track {
+
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+
+  height: 3px;
+
+  background: rgba(56, 189, 248, 0.12);
+
+  overflow: hidden;
+
+  pointer-events: none;
+
+  z-index: 10000;
+
+}
+
+.global-loading-bar {
+
+  width: 35%;
+  height: 100%;
+
+  background: linear-gradient(
+    90deg,
+    #2563eb,
+    #38bdf8,
+    #818cf8
+  );
+
+  box-shadow: 0 0 12px #38bdf8;
+
+  animation: loading-progress 1.3s
+    ease-in-out infinite;
+
+}
+
+@keyframes loading-progress {
+
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(390%);
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .global-loading-bar {
+
+    animation: none;
+    width: 100%;
+
+  }
+
+}

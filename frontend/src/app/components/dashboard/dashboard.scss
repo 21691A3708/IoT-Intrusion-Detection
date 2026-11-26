@@ -850,3 +850,27 @@
     width: 100%;
   }
 }
+
+/* Responsive shell refinement */
+.dashboard-charts-grid { align-items: start; }
+.risk-distribution-grid { flex: none; }
+.risk-card { min-height: 100px; }
+.sidebar-brand span, .sidebar-version, .analytics-card small, .panel-heading p { color: #9aadc4; font-size: 12px; }
+.nav-link { font-size: 14px; min-height: 44px; }
+.nav-icon { display: inline-flex; flex-shrink: 0; }
+.analytics-card span, .risk-card .risk-label { font-size: 13px; }
+.analytics-card strong { font-size: 30px; }
+.header-title h1 { font-size: clamp(18px, 2vw, 25px); }
+.header-title p, .analytics-heading p { font-size: 13px; }
+.menu-toggle { display: none; }
+.inline-spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #34465e; border-top-color: #38bdf8; border-radius: 50%; vertical-align: middle; animation: inline-spin .8s linear infinite; }
+@keyframes inline-spin { to { transform: rotate(360deg); } }
+@media (max-width: 700px) {
+  .menu-toggle { display: block; margin-top: 12px; padding: 10px; background: #142238; color: #e2e8f0; border: 1px solid #34465e; border-radius: 8px; }
+  .sidebar-menu:not(.menu-open) { display: none; }
+  .sidebar-menu nav { flex-direction: column; }
+  .nav-link { width: 100%; }
+  .sidebar-bottom { display: none; }
+  .header-title { min-width: 0; }
+  .header-title h1 { overflow-wrap: anywhere; }
+}

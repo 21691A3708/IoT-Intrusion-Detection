@@ -1,1 +1,8 @@
-/* You can add global styles to this file, and also import other style files */
+/* Shared application foundation */
+html { color-scheme: dark; background: #080e19; }
+body { margin: 0; min-width: 320px; font-family: Inter, 'Segoe UI', sans-serif; color: #e2e8f0; }
+*, *::before, *::after { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
+img, canvas { max-width: 100%; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

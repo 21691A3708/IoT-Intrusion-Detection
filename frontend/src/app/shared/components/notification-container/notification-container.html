@@ -1,0 +1,96 @@
+﻿<section
+  class="notification-container"
+  aria-label="Application notifications"
+  aria-live="polite"
+>
+
+  @for (
+    item of service.notifications();
+    track item.id
+  ) {
+
+    <article
+      class="notification"
+      [class.success]="item.type === 'success'"
+      [class.error]="item.type === 'error'"
+      [class.warning]="item.type === 'warning'"
+      [class.info]="item.type === 'info'"
+    >
+
+      <div class="notification-icon">
+
+        <svg
+          width="22"
+          height="22"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+
+          @switch (item.type) {
+
+            @case ('success') {
+              <circle cx="12" cy="12" r="9"/>
+              <path d="m8 12 3 3 5-6"/>
+            }
+
+            @case ('error') {
+              <circle cx="12" cy="12" r="9"/>
+              <path d="m9 9 6 6m0-6-6 6"/>
+            }
+
+            @case ('warning') {
+              <path d="M12 3 2 21h20L12 3Z"/>
+              <path d="M12 9v4m0 4h.01"/>
+            }
+
+            @default {
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M12 11v5m0-8h.01"/>
+            }
+
+          }
+
+        </svg>
+
+      </div>
+
+      <div class="notification-content">
+
+        <strong>{{ item.title }}</strong>
+
+        <p>{{ item.message }}</p>
+
+      </div>
+
+      <button
+        type="button"
+        class="dismiss-button"
+        aria-label="Dismiss notification"
+        title="Dismiss notification"
+        (click)="service.dismiss(item.id)"
+      >
+
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <path d="m6 6 12 12M18 6 6 18"/>
+        </svg>
+
+      </button>
+
+    </article>
+
+  }
+
+</section>

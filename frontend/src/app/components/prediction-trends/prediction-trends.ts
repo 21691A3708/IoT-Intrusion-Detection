@@ -32,13 +32,13 @@ export class PredictionTrends implements OnInit {
 
   protected readonly error = signal('');
 
-  protected readonly selectedRange = signal<DateRange>('7days');
+  protected readonly selectedRange = signal<DateRange>('all');
 
   // --------------------------------------------------
   // CHART DATA
   // --------------------------------------------------
 
-  protected readonly lineChartData: ChartConfiguration<'line'>['data'] = {
+  protected lineChartData: ChartConfiguration<'line'>['data'] = {
     labels: [],
     datasets: [
       {
@@ -271,5 +271,6 @@ export class PredictionTrends implements OnInit {
 
     // Update attack prediction values
     this.lineChartData.datasets[1].data = entries.map((entry) => entry.attack);
+    this.lineChartData = { ...this.lineChartData, datasets: this.lineChartData.datasets.map(dataset => ({ ...dataset })) };
   }
 }

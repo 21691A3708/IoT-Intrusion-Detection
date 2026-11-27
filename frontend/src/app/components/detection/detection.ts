@@ -1,3 +1,13 @@
+import { MonitoringApiService } from '../../core/services/monitoring-api.service';
+
+import { inject as comparisonInject, signal as comparisonSignal } from '@angular/core';
+
+import { ContextComparison } from '../../shared/components/context-comparison/context-comparison';
+
+import { ContextComparisonApiService } from '../../core/services/context-comparison-api.service';
+
+import type { ContextComparisonResponse } from '../../core/models/context-comparison.model';
+
 import {
   Component,
   DestroyRef,
@@ -47,7 +57,7 @@ import {
 @Component({
   selector: 'app-detection',
   standalone: true,
-  imports: [
+  imports: [ContextComparison,
     FormsModule,
     DecimalPipe,
     DeviceContextSelector,
@@ -58,6 +68,146 @@ import {
   styleUrl: './detection.scss',
 })
 export class Detection implements OnInit {
+
+  private readonly sampleApi =
+    comparisonInject(MonitoringApiService);
+
+  protected readonly sampleLoading =
+    comparisonSignal(false);
+
+  protected loadTestSample(sampleId: string): void {
+
+    if (!sampleId || this.submitting() || this.sampleLoading()) {
+      return;
+    }
+
+    this.sampleLoading.set(true);
+    this.errorMessage.set('');
+
+    const previousInput = this.trafficJson;
+
+    this.sampleApi.getSamples().pipe(
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.sampleLoading.set(false))
+    ).subscribe({
+
+      next: samples => {
+
+        const sample = samples.find(
+          item => item.id === sampleId
+        );
+
+        if (!sample) {
+          this.errorMessage.set('Test sample not found.');
+          return;
+        }
+
+        if (
+          this.submitting() ||
+          previousInput !== this.trafficJson
+        ) return;
+
+        this.trafficJson = JSON.stringify(
+          sample.features, null, 2
+        );
+
+        this.assessmentState.set(null);
+        this.comparisonResult.set(null);
+
+        this.notifications.success(
+          sample.family + ' sample loaded.',
+          'Test sample'
+        );
+      },
+
+      error: () => {
+        this.errorMessage.set('Could not load test sample.');
+      },
+
+    });
+  }
+
+
+
+  private readonly comparisonApi =
+    comparisonInject(ContextComparisonApiService);
+
+  protected readonly comparisonResult =
+    comparisonSignal<ContextComparisonResponse | null>(null);
+
+  protected compareContexts(): void {
+
+    if (
+      this.submitting() ||
+      !this.modelInfo() ||
+      this.context.loading()
+    ) {
+      return;
+    }
+
+    this.errorMessage.set('');
+    this.comparisonResult.set(null);
+    this.assessmentState.set(null);
+
+    let features: TrafficFeatures;
+
+    try {
+      features = this.validateFeatures();
+    } catch (error) {
+      this.errorMessage.set(
+        error instanceof Error
+          ? error.message
+          : 'Invalid traffic features.'
+      );
+      return;
+    }
+
+    const inputSnapshot = this.trafficJson;
+
+    this.submitting.set(true);
+
+    this.comparisonApi.compare({
+      features,
+      source: 'manual_context_comparison',
+    }).pipe(
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.submitting.set(false))
+    ).subscribe({
+
+      next: response => {
+
+        if (inputSnapshot !== this.trafficJson) {
+          return;
+        }
+
+        if (
+          response.prediction.model_version !==
+          this.modelInfo()?.model_version
+        ) {
+          this.errorMessage.set('Unexpected model version.');
+          return;
+        }
+
+        this.comparisonResult.set(response);
+
+        this.notifications.success(
+          'All device contexts evaluated successfully.',
+          'Comparison completed'
+        );
+      },
+
+      error: error => {
+        this.errorMessage.set(
+          error instanceof Error
+            ? error.message
+            : getApiErrorMessage(error)
+        );
+      },
+
+    });
+  }
+
+
 
   private readonly api = inject(MulticlassApiService);
   private readonly riskApi = inject(RiskAssessmentApiService);
@@ -92,6 +242,7 @@ export class Detection implements OnInit {
       const selected = this.context.selectedDeviceId();
       if (selected !== this.submittedContext()) {
         this.assessmentState.set(null);
+    this.comparisonResult.set(null);
       }
     });
   }
@@ -153,6 +304,7 @@ export class Detection implements OnInit {
     this.modelError.set('');
     this.modelInfo.set(null);
     this.assessmentState.set(null);
+    this.comparisonResult.set(null);
 
     this.api.getModelInfo().pipe(
       takeUntilDestroyed(this.destroyRef),
@@ -202,6 +354,7 @@ export class Detection implements OnInit {
     );
 
     this.assessmentState.set(null);
+    this.comparisonResult.set(null);
     this.errorMessage.set('');
 
     this.notifications.info(
@@ -220,6 +373,7 @@ export class Detection implements OnInit {
     this.trafficJson = '';
     this.errorMessage.set('');
     this.assessmentState.set(null);
+    this.comparisonResult.set(null);
 
   }
 
@@ -228,6 +382,7 @@ export class Detection implements OnInit {
     this.trafficJson = value;
     this.errorMessage.set('');
     this.assessmentState.set(null);
+    this.comparisonResult.set(null);
 
   }
 
@@ -322,6 +477,7 @@ export class Detection implements OnInit {
 
     this.errorMessage.set('');
     this.assessmentState.set(null);
+    this.comparisonResult.set(null);
 
     let features: TrafficFeatures;
 

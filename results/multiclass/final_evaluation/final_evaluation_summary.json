@@ -1,0 +1,295 @@
+{
+  "generated_at": "2026-11-27T02:57:53.339619+00:00",
+  "model_version": "multiclass_rf_v3_calibrated",
+  "model_sha256": "f5ef03092b18018b89a6570cdcc36b8878bcb51c288d9edf846ee18752f573c5",
+  "test_dataset_sha256": "8ecac8991506a846848a83b1dee40b978c009f46ee3f6decf35e26b1f0249b64",
+  "evaluation_dataset": "verified_held_out_test",
+  "test_records": 188343,
+  "test_capture_count": 47,
+  "feature_count": 36,
+  "class_count": 8,
+  "test_supported_classes": [
+    "Benign",
+    "DDoS",
+    "DoS",
+    "Reconnaissance",
+    "Spoofing",
+    "Mirai",
+    "WebBased"
+  ],
+  "test_unsupported_classes": [
+    "BruteForce"
+  ],
+  "attack_prevalence": 0.9735270225068093,
+  "alert_threshold": 0.9,
+  "multiclass_metrics": {
+    "accuracy": 0.8469494486123721,
+    "balanced_accuracy": 0.7027621984397158,
+    "macro_precision_supported": 0.7037361889846381,
+    "macro_recall_supported": 0.7027621984397158,
+    "macro_f1_supported": 0.6968692102816332,
+    "weighted_f1": 0.8561338176372995,
+    "multiclass_log_loss": 0.33205892286976374,
+    "supported_labels": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      6,
+      7
+    ],
+    "unsupported_labels": [
+      4
+    ]
+  },
+  "per_family_metrics": [
+    {
+      "class_id": 0,
+      "attack_family": "Benign",
+      "precision": 0.5611510791366906,
+      "recall": 0.5788206979542719,
+      "f1_score": 0.5698489485635304,
+      "support": 4986,
+      "predicted_count": 5143,
+      "test_supported": true
+    },
+    {
+      "class_id": 1,
+      "attack_family": "DDoS",
+      "precision": 0.9532569996650582,
+      "recall": 0.8236031768148251,
+      "f1_score": 0.8836998021988132,
+      "support": 93301,
+      "predicted_count": 80611,
+      "test_supported": true
+    },
+    {
+      "class_id": 2,
+      "attack_family": "DoS",
+      "precision": 0.5377637193757274,
+      "recall": 0.8290472466301697,
+      "f1_score": 0.652367506516073,
+      "support": 21737,
+      "predicted_count": 33511,
+      "test_supported": true
+    },
+    {
+      "class_id": 3,
+      "attack_family": "Reconnaissance",
+      "precision": 0.5624123422159888,
+      "recall": 0.5643345396059509,
+      "f1_score": 0.563371801304566,
+      "support": 4974,
+      "predicted_count": 4991,
+      "test_supported": true
+    },
+    {
+      "class_id": 4,
+      "attack_family": "BruteForce",
+      "precision": null,
+      "recall": null,
+      "f1_score": null,
+      "support": 0,
+      "predicted_count": 1285,
+      "test_supported": false
+    },
+    {
+      "class_id": 5,
+      "attack_family": "Spoofing",
+      "precision": 0.8857350800582242,
+      "recall": 0.7375757575757576,
+      "f1_score": 0.8048941798941799,
+      "support": 4950,
+      "predicted_count": 4122,
+      "test_supported": true
+    },
+    {
+      "class_id": 6,
+      "attack_family": "Mirai",
+      "precision": 0.9816758256906026,
+      "recall": 0.9983364796919684,
+      "f1_score": 0.989936057825966,
+      "support": 53501,
+      "predicted_count": 54409,
+      "test_supported": true
+    },
+    {
+      "class_id": 7,
+      "attack_family": "WebBased",
+      "precision": 0.4441582767501756,
+      "recall": 0.3876174908050674,
+      "f1_score": 0.41396617566830335,
+      "support": 4894,
+      "predicted_count": 4271,
+      "test_supported": true
+    }
+  ],
+  "binary_detection_metrics": {
+    "multiclass_argmax": {
+      "true_negatives": 2886,
+      "false_positives": 2100,
+      "false_negatives": 2257,
+      "true_positives": 181100,
+      "accuracy": 0.9768666740999135,
+      "precision": 0.9885371179039302,
+      "recall": 0.9876906799304089,
+      "f1_score": 0.9881137176482785,
+      "false_positive_rate": 0.42117930204572807,
+      "false_negative_rate": 0.012309320069591016,
+      "specificity": 0.5788206979542719,
+      "alert_count": 183200
+    },
+    "raw_probability_0_50": {
+      "true_negatives": 2219,
+      "false_positives": 2767,
+      "false_negatives": 854,
+      "true_positives": 182503,
+      "accuracy": 0.9807744381261847,
+      "precision": 0.9850650402115831,
+      "recall": 0.9953424194331277,
+      "f1_score": 0.9901770624506615,
+      "false_positive_rate": 0.5549538708383474,
+      "false_negative_rate": 0.004657580566872276,
+      "specificity": 0.44504612916165265,
+      "alert_count": 185270
+    },
+    "calibrated_probability_0_50": {
+      "true_negatives": 1695,
+      "false_positives": 3291,
+      "false_negatives": 489,
+      "true_positives": 182868,
+      "accuracy": 0.9799302336694222,
+      "precision": 0.9823215638244727,
+      "recall": 0.9973330715489455,
+      "f1_score": 0.9897704023641737,
+      "false_positive_rate": 0.6600481347773767,
+      "false_negative_rate": 0.0026669284510545004,
+      "specificity": 0.33995186522262333,
+      "alert_count": 186159
+    },
+    "raw_probability_0_90": {
+      "true_negatives": 3867,
+      "false_positives": 1119,
+      "false_negatives": 5555,
+      "true_positives": 177802,
+      "accuracy": 0.9645646506639483,
+      "precision": 0.993745843137474,
+      "recall": 0.9697039109496775,
+      "f1_score": 0.981577683436477,
+      "false_positive_rate": 0.22442839951865223,
+      "false_negative_rate": 0.030296089050322595,
+      "specificity": 0.7755716004813478,
+      "alert_count": 178921
+    },
+    "calibrated_probability_0_90": {
+      "true_negatives": 3894,
+      "false_positives": 1092,
+      "false_negatives": 5701,
+      "true_positives": 177656,
+      "accuracy": 0.9639328246868745,
+      "precision": 0.9938908407366795,
+      "recall": 0.9689076501033503,
+      "f1_score": 0.9812402479943663,
+      "false_positive_rate": 0.2190132370637786,
+      "false_negative_rate": 0.031092349896649704,
+      "specificity": 0.7809867629362214,
+      "alert_count": 178748
+    }
+  },
+  "calibration_metrics": {
+    "raw": {
+      "roc_auc": 0.9828370093723007,
+      "average_precision": 0.9995280770612808,
+      "brier_score": 0.015205023311068013,
+      "binary_log_loss": 0.052920293408205636,
+      "ece_10_bins": 0.007038060722761114
+    },
+    "calibrated": {
+      "roc_auc": 0.9828370093723007,
+      "average_precision": 0.9995280770612808,
+      "brier_score": 0.015523646698358724,
+      "binary_log_loss": 0.05145677435684509,
+      "ece_10_bins": 0.008059941184930036
+    }
+  },
+  "alert_rates_by_family": [
+    {
+      "attack_family": "Benign",
+      "support": 4986,
+      "alerts": 1092,
+      "alert_rate": 0.2190132370637786,
+      "threshold": 0.9
+    },
+    {
+      "attack_family": "DDoS",
+      "support": 93301,
+      "alerts": 93261,
+      "alert_rate": 0.9995712800505889,
+      "threshold": 0.9
+    },
+    {
+      "attack_family": "DoS",
+      "support": 21737,
+      "alerts": 21736,
+      "alert_rate": 0.9999539954915582,
+      "threshold": 0.9
+    },
+    {
+      "attack_family": "Reconnaissance",
+      "support": 4974,
+      "alerts": 3780,
+      "alert_rate": 0.7599517490952955,
+      "threshold": 0.9
+    },
+    {
+      "attack_family": "BruteForce",
+      "support": 0,
+      "alerts": 0,
+      "alert_rate": null,
+      "threshold": 0.9
+    },
+    {
+      "attack_family": "Spoofing",
+      "support": 4950,
+      "alerts": 3723,
+      "alert_rate": 0.7521212121212121,
+      "threshold": 0.9
+    },
+    {
+      "attack_family": "Mirai",
+      "support": 53501,
+      "alerts": 53495,
+      "alert_rate": 0.9998878525635034,
+      "threshold": 0.9
+    },
+    {
+      "attack_family": "WebBased",
+      "support": 4894,
+      "alerts": 1661,
+      "alert_rate": 0.3393951777686964,
+      "threshold": 0.9
+    }
+  ],
+  "performance": {
+    "test_records": 188343,
+    "batch_size": 10000,
+    "total_inference_seconds": 0.8972031999874162,
+    "calibration_seconds": 0.31473949999781325,
+    "inference_records_per_second": 209922.3453534736,
+    "single_record_samples": 100,
+    "single_record_mean_ms": 30.428599999722792,
+    "single_record_median_ms": 28.30260000337148,
+    "single_record_p95_ms": 41.76198999630287,
+    "single_record_max_ms": 62.97299999278039
+  },
+  "limitations": [
+    "Evaluation uses the duplicate-filtered held-out test dataset.",
+    "Unsupported classes are excluded from supported-class macro averages.",
+    "Binary attack calibration does not calibrate individual family probabilities.",
+    "Threshold analysis is descriptive and must not be used for test-set tuning.",
+    "Latency measures local model inference, not end-to-end API latency.",
+    "Dataset attack prevalence may differ substantially from deployment prevalence.",
+    "Capture-level separation does not prove independent real-world network sessions."
+  ]
+}

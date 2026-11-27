@@ -151,7 +151,41 @@
 
       <label for="traffic-json">Traffic features (JSON)</label>
 
-      <textarea
+
+<div style="margin: 12px 0;">
+
+  <label for="test-sample-select">
+    Load Test Sample
+  </label>
+
+  <select
+    id="test-sample-select"
+    #sampleSelect
+    (change)="loadTestSample(sampleSelect.value);
+              sampleSelect.value = ''"
+    [disabled]="submitting() || sampleLoading()"
+    style="width:100%; margin-top:8px; padding:12px;
+           background:#101b2c; color:#e2e8f0;
+           border:1px solid #35445b; border-radius:8px;">
+
+    <option value="">Select a test sample</option>
+    <option value="benign">Benign</option>
+    <option value="ddos">DDoS</option>
+    <option value="dos">DoS</option>
+    <option value="reconnaissance">Reconnaissance</option>
+    <option value="spoofing">Spoofing</option>
+    <option value="mirai">Mirai</option>
+    <option value="webbased">WebBased</option>
+
+  </select>
+
+  @if (sampleLoading()) {
+    <p role="status">Loading test sample...</p>
+  }
+
+</div>
+
+<textarea
         id="traffic-json"
         [ngModel]="trafficJson"
         (ngModelChange)="onInputChange($event)"
@@ -190,7 +224,20 @@
 
       </button>
 
-      <p class="muted small">
+
+      <button
+        type="button"
+        class="secondary-button"
+        style="width: 100%; margin-top: 12px;"
+        (click)="compareContexts()"
+        [disabled]="submitting() || !modelInfo() ||
+                    context.loading() || !trafficJson.trim()">
+
+        Compare All Device Contexts
+
+      </button>
+
+<p class="muted small">
         This operation does not save a prediction,
         create an incident or execute a response.
       </p>
@@ -380,4 +427,9 @@
       <app-risk-contributions [result]="riskResult" />
     </div>
   }
+
+  @if (comparisonResult(); as comparison) {
+    <app-context-comparison [result]="comparison" />
+  }
+
 </div>

@@ -1,0 +1,350 @@
+﻿<section class="monitor">
+
+  <header class="section-header">
+    <div>
+      <h2>
+        {{ mode() === 'dashboard'
+          ? 'Multiclass Security Overview'
+          : 'Multiclass Traffic Monitor' }}
+      </h2>
+
+      <p>
+        Persistent predictions, contextual risk and security incidents.
+      </p>
+    </div>
+
+    <button type="button"
+            (click)="refresh()"
+            [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  <div class="notice">
+    Multiclass data only. All device contexts are unverified.
+    Network containment is disabled.
+  </div>
+
+  @if (error()) {
+    <div class="error" role="alert">{{ error() }}</div>
+  }
+
+  <div class="stats-grid">
+
+    <article class="stat">
+      <small>Total persisted predictions</small>
+      <strong>{{ total() }}</strong>
+      <span>All stored multiclass records</span>
+    </article>
+
+    <article class="stat attack">
+      <small>Predicted attacks</small>
+      <strong>{{ attackCount() }}</strong>
+      <span>Latest {{ records().length }} records</span>
+    </article>
+
+    <article class="stat warning">
+      <small>Active incidents</small>
+      <strong>{{ incidents()?.active_incidents ?? '—' }}</strong>
+      <span>All unresolved multiclass incidents</span>
+    </article>
+
+    <article class="stat critical">
+      <small>Critical active incidents</small>
+      <strong>{{ incidents()?.active_critical_incidents ?? '—' }}</strong>
+      <span>Priority investigation</span>
+    </article>
+
+  </div>
+
+  @if (mode() === 'traffic') {
+
+    <section class="panel">
+
+      <div class="section-header">
+        <div>
+          <h3>Dataset Replay Controller</h3>
+          <p>Simulated traffic, not live packet capture.</p>
+        </div>
+
+        <span class="state"
+              [attr.data-state]="replayState()">
+          {{ replayState() | uppercase }}
+        </span>
+      </div>
+
+      <app-device-context-selector
+        [disabled]="replayState() !== 'stopped' || inFlight()" />
+
+      <div class="settings-grid">
+
+        <label>
+          Attack sample
+          <select [(ngModel)]="selectedFamily"
+                  [disabled]="replayState() !== 'stopped' || inFlight()">
+
+            <option value="all">All seven samples</option>
+
+            @for (sample of samples(); track sample.id) {
+              <option [value]="sample.family">
+                {{ sample.family }}
+              </option>
+            }
+
+          </select>
+        </label>
+
+        <label>
+          Interval (seconds)
+          <input type="number"
+                 min="1"
+                 max="60"
+                 [(ngModel)]="intervalSeconds"
+                 [disabled]="replayState() !== 'stopped' || inFlight()" />
+        </label>
+
+        <label>
+          Number of records
+          <input type="number"
+                 min="1"
+                 max="100"
+                 [(ngModel)]="recordLimit"
+                 [disabled]="replayState() !== 'stopped' || inFlight()" />
+        </label>
+
+      </div>
+
+      <div class="controls">
+
+        <button type="button"
+                class="primary"
+                (click)="start()"
+                [disabled]="replayState() !== 'stopped' ||
+                            inFlight() || !samples().length">
+          Start Replay
+        </button>
+
+        <button type="button"
+                (click)="pause()"
+                [disabled]="replayState() !== 'running'">
+          Pause
+        </button>
+
+        <button type="button"
+                (click)="resume()"
+                [disabled]="replayState() !== 'paused'">
+          Resume
+        </button>
+
+        <button type="button"
+                class="danger"
+                (click)="stop()"
+                [disabled]="replayState() === 'stopped'">
+          Stop
+        </button>
+
+      </div>
+
+      <div class="stats-grid replay-stats">
+
+        <article class="stat">
+          <small>Processed this session</small>
+          <strong>{{ processed() }}</strong>
+        </article>
+
+        <article class="stat">
+          <small>Incidents created</small>
+          <strong>{{ replayIncidents() }}</strong>
+        </article>
+
+        <article class="stat">
+          <small>Current sample</small>
+          <strong class="family-value">
+            {{ currentFamily() || '—' }}
+          </strong>
+        </article>
+
+        <article class="stat">
+          <small>Request status</small>
+          <strong class="family-value">
+            {{ inFlight() ? 'Processing' : 'Idle' }}
+          </strong>
+        </article>
+
+      </div>
+
+      @if (replayError()) {
+        <div class="error" role="alert">
+          {{ replayError() }}
+        </div>
+      }
+
+      <p class="muted">
+        Replay writes demonstration records to PostgreSQL.
+        Pause and Stop prevent new requests; a request already
+        submitted may still finish.
+      </p>
+
+    </section>
+  }
+
+  <div class="distribution-grid">
+
+    <section class="panel">
+      <h3>Attack Family Distribution</h3>
+      <p>Latest {{ records().length }} persisted predictions</p>
+
+      @for (row of familyDistribution(); track row.family) {
+
+        <div class="distribution-row">
+
+          <div class="bar-label">
+            <span>{{ row.family }}</span>
+            <strong>{{ row.count }}</strong>
+          </div>
+
+          <div class="bar-track">
+            <div class="bar-fill"
+                 [class.benign]="row.family === 'Benign'"
+                 [style.width.%]="records().length
+                    ? row.count / records().length * 100 : 0">
+            </div>
+          </div>
+
+        </div>
+      }
+
+    </section>
+
+    <section class="panel">
+      <h3>Context-Aware Risk Distribution</h3>
+      <p>Latest {{ records().length }} persisted predictions</p>
+
+      @for (row of riskDistribution(); track row.level) {
+
+        <div class="distribution-row">
+
+          <div class="bar-label">
+            <span>{{ row.level | titlecase }}</span>
+            <strong>{{ row.count }}</strong>
+          </div>
+
+          <div class="bar-track">
+            <div class="bar-fill"
+                 [attr.data-risk]="row.level"
+                 [style.width.%]="records().length
+                    ? row.count / records().length * 100 : 0">
+            </div>
+          </div>
+
+        </div>
+      }
+
+      <h3 class="incident-title">Incident Summary</h3>
+
+      <div class="summary-line">
+        <span>Open</span>
+        <strong>{{ incidents()?.open_incidents ?? '—' }}</strong>
+      </div>
+
+      <div class="summary-line">
+        <span>Acknowledged</span>
+        <strong>{{ incidents()?.acknowledged_incidents ?? '—' }}</strong>
+      </div>
+
+      <div class="summary-line">
+        <span>Investigating</span>
+        <strong>{{ incidents()?.investigating_incidents ?? '—' }}</strong>
+      </div>
+
+      <div class="summary-line">
+        <span>Resolved</span>
+        <strong>{{ incidents()?.resolved_incidents ?? '—' }}</strong>
+      </div>
+
+      <div class="summary-line">
+        <span>False positive</span>
+        <strong>{{ incidents()?.false_positive_incidents ?? '—' }}</strong>
+      </div>
+
+    </section>
+
+  </div>
+
+  <section class="panel">
+
+    <div class="section-header">
+      <div>
+        <h3>Recent Multiclass Traffic</h3>
+        <p>Showing up to 100 records. Refreshes every 10 seconds.</p>
+      </div>
+    </div>
+
+    <div class="table-container">
+
+      <table>
+
+        <thead>
+          <tr>
+            <th>Attack family</th>
+            <th>Attack probability</th>
+            <th>Risk score</th>
+            <th>Risk level</th>
+            <th>Device context</th>
+            <th>Incident</th>
+            <th>Source</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+
+        <tbody>
+
+          @for (row of records(); track row.response_id) {
+
+            <tr>
+              <td>{{ row.predicted_family }}</td>
+
+              <td>
+                {{ row.calibrated_attack_probability * 100
+                   | number:'1.2-2' }}%
+              </td>
+
+              <td>{{ row.risk_score | number:'1.2-2' }}</td>
+
+              <td>
+                <span class="risk-tag"
+                      [attr.data-risk]="row.risk_level">
+                  {{ row.risk_level | titlecase }}
+                </span>
+              </td>
+
+              <td>
+                {{ row.requested_device_identifier || 'Unknown' }}
+              </td>
+
+              <td>{{ row.incident_created ? 'Created' : 'No' }}</td>
+
+              <td>{{ row.source }}</td>
+
+              <td>{{ row.created_at | date:'medium' }}</td>
+            </tr>
+
+          } @empty {
+
+            <tr>
+              <td colspan="8">
+                {{ loading() ? 'Loading...' : 'No records available.' }}
+              </td>
+            </tr>
+
+          }
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  </section>
+
+</section>

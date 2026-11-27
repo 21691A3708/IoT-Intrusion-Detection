@@ -1,0 +1,232 @@
+﻿<section class="operations">
+
+  <header class="section-header">
+    <div>
+      <h2>Reports and Batch Analysis</h2>
+      <p>Multiclass network traffic classification and security reports.</p>
+    </div>
+  </header>
+
+  <div class="notice">
+    Prediction-only analysis. No incidents or containment actions
+    are automatically created by this module.
+  </div>
+
+  <section class="panel">
+
+    <h3>Upload Network Traffic Dataset</h3>
+
+    <p>
+      CSV format · Maximum 10,000 records · Maximum 10 MB.
+      All required model features must be present.
+    </p>
+
+    @if (model(); as info) {
+      <p>
+        Model: {{ info.model_version }} |
+        Required features: {{ info.feature_count }}
+      </p>
+    }
+
+    <label>
+      Select CSV dataset
+      <input type="file"
+             accept=".csv,text/csv"
+             (change)="selectFile($event)"
+             [disabled]="loading() || reading() || !model()" />
+    </label>
+
+    @if (fileName()) {
+      <p>Selected file: {{ fileName() }}</p>
+      <p>Validated records: {{ records().length }}</p>
+    }
+
+    <button class="primary"
+            (click)="analyze()"
+            [disabled]="loading() || reading() || !records().length">
+      {{ loading() ? 'Analyzing Dataset...' : 'Analyze Dataset' }}
+    </button>
+
+    @if (loading() || processed()) {
+
+      <p>
+        Processed {{ processed() }} of {{ records().length }} records
+        ({{ progress() | number:'1.0-1' }}%)
+      </p>
+
+      <progress [value]="processed()"
+                [max]="records().length">
+      </progress>
+
+    }
+
+  </section>
+
+  @if (error()) {
+    <div class="error" role="alert">{{ error() }}</div>
+  }
+
+  @if (results().length) {
+
+    @if (!completed()) {
+      <div class="notice">
+        Analysis is incomplete. Statistics represent processed records only.
+      </div>
+    }
+
+    <div class="metrics">
+
+      <article>
+        <small>Processed records</small>
+        <strong>{{ summary().total }}</strong>
+      </article>
+
+      <article>
+        <small>Predicted benign</small>
+        <strong class="green">{{ summary().benign }}</strong>
+      </article>
+
+      <article>
+        <small>Predicted attacks</small>
+        <strong class="critical">{{ summary().attacks }}</strong>
+      </article>
+
+      <article>
+        <small>High confidence alerts</small>
+        <strong>{{ summary().alerts }}</strong>
+      </article>
+
+    </div>
+
+    <section class="panel">
+
+      <h3>Multiclass Prediction Distribution</h3>
+
+      <p>
+        Mean calibrated attack probability:
+        {{ summary().meanProbability * 100 | number:'1.2-2' }}%
+      </p>
+
+      @for (row of distribution(); track row.family) {
+
+        <div class="distribution-row">
+
+          <span>{{ row.family }}</span>
+
+          <div class="bar-track">
+            <div class="bar-fill"
+                 [class.benign]="row.family === 'Benign'"
+                 [style.width.%]="row.percent">
+            </div>
+          </div>
+
+          <span>
+            {{ row.count }}
+            ({{ row.percent | number:'1.1-1' }}%)
+          </span>
+
+        </div>
+
+      }
+
+      <p>
+        BruteForce lacks held-out evaluation support.
+        These counts are model predictions, not verified attack labels.
+      </p>
+
+    </section>
+
+    <section class="panel">
+
+      <h3>Prediction Results</h3>
+
+      <div class="table-container">
+
+        <table>
+
+          <thead>
+            <tr>
+              <th>Record</th>
+              <th>Predicted family</th>
+              <th>Family confidence</th>
+              <th>Attack probability</th>
+              <th>Detection status</th>
+              <th>High confidence alert</th>
+            </tr>
+          </thead>
+
+          <tbody>
+
+            @for (row of visibleRows(); track $index) {
+
+              <tr>
+                <td>{{ page() * pageSize + $index + 1 }}</td>
+                <td>{{ row.predicted_family }}</td>
+                <td>
+                  {{ row.prediction_confidence * 100
+                     | number:'1.2-2' }}%
+                </td>
+                <td>
+                  {{ row.attack_probability * 100
+                     | number:'1.2-2' }}%
+                </td>
+                <td>{{ row.detection_status }}</td>
+                <td>{{ row.high_confidence_alert ? 'Yes' : 'No' }}</td>
+              </tr>
+
+            }
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+      <div class="pagination">
+
+        <button (click)="previousPage()"
+                [disabled]="page() === 0">
+          Previous
+        </button>
+
+        <span>Page {{ page() + 1 }}</span>
+
+        <button (click)="nextPage()"
+                [disabled]="(page() + 1) * pageSize >= results().length">
+          Next
+        </button>
+
+      </div>
+
+    </section>
+
+    <section class="panel">
+
+      <h3>Export Security Report</h3>
+
+      <p>
+        Download completed prediction results for academic
+        analysis and documentation.
+      </p>
+
+      <div class="controls">
+
+        <button class="primary"
+                (click)="exportCsv()"
+                [disabled]="!completed() || loading()">
+          Download CSV Report
+        </button>
+
+        <button
+          (click)="exportJson()"
+          [disabled]="!completed() || loading()">
+          Download JSON Report
+        </button>
+
+      </div>
+
+    </section>
+
+  }
+
+</section>

@@ -1,164 +1,407 @@
-<section class="incident-container">
-  <!-- HEADER -->
-  <div class="section-header">
-    <div class="heading-content">
-      <div class="heading-icon">🛡️</div>
-      <div>
-        <h2>Incident Management</h2>
-        <p>Monitor, investigate, and manage detected security incidents.</p>
-      </div>
-    </div>
+﻿<section class="operations">
 
-    <button class="refresh-button" (click)="loadIncidents()" [disabled]="loading">
-      <span>↻</span>
-      {{ loading ? 'Loading...' : 'Refresh Incidents' }}
-    </button>
-  </div>
-
-  <!-- SUMMARY -->
-  <div class="summary-grid">
-    <div class="summary-card">
-      <div class="summary-top">
-        <span>Total Incidents</span>
-        <span class="summary-icon">📋</span>
-      </div>
-      <p>{{ totalIncidents }}</p>
-      <small>Recorded security incidents</small>
-    </div>
-
-    <div class="summary-card open">
-      <div class="summary-top">
-        <span>Open</span>
-        <span class="summary-icon">🔔</span>
-      </div>
-      <p>{{ incidents.filter((i) => i.status === 'open').length }}</p>
-      <small>Awaiting action</small>
-    </div>
-
-    <div class="summary-card investigating">
-      <div class="summary-top">
-        <span>Investigating</span>
-        <span class="summary-icon">🔍</span>
-      </div>
-      <p>{{ incidents.filter((i) => i.status === 'investigating').length }}</p>
-      <small>Under investigation</small>
-    </div>
-
-    <div class="summary-card resolved">
-      <div class="summary-top">
-        <span>Resolved</span>
-        <span class="summary-icon">✓</span>
-      </div>
-      <p>{{ incidents.filter((i) => i.status === 'resolved').length }}</p>
-      <small>Successfully resolved</small>
-    </div>
-  </div>
-
-  <!-- NOTIFICATIONS -->
-  <div class="success-message" *ngIf="successMessage">
-    <span>✓</span>
-    {{ successMessage }}
-  </div>
-
-  <div class="error-message" *ngIf="errorMessage">
-    <span>!</span>
-    {{ errorMessage }}
-  </div>
-
-  <!-- INCIDENT LIST HEADER -->
-  <div class="list-heading">
+  <header class="section-header">
     <div>
-      <h3>Security Incidents</h3>
-      <p>Review incident details and update their investigation status.</p>
+      <h2>Multiclass Incident Management</h2>
+      <p>Investigate and manage persistent security incidents.</p>
     </div>
 
-    <span class="record-count">{{ incidents.length }} records</span>
+    <button (click)="refresh()" [disabled]="loading()">
+      {{ loading() ? 'Refreshing...' : 'Refresh' }}
+    </button>
+  </header>
+
+  <div class="notice">
+    Academic demonstration. Analyst names are not authenticated.
+    All incident actions are simulation-only.
   </div>
 
-  <!-- LOADING -->
-  <div class="message loading-message" *ngIf="loading">
-    <span class="loading-indicator"></span>
-    Loading security incidents...
+  <div class="metrics">
+
+    <article>
+      <small>Total incidents</small>
+      <strong>{{ summary()?.total_incidents ?? '—' }}</strong>
+    </article>
+
+    <article>
+      <small>Active incidents</small>
+      <strong>{{ summary()?.active_incidents ?? '—' }}</strong>
+    </article>
+
+    <article>
+      <small>Critical active</small>
+      <strong class="critical">
+        {{ summary()?.active_critical_incidents ?? '—' }}
+      </strong>
+    </article>
+
+    <article>
+      <small>Resolved incidents</small>
+      <strong class="green">
+        {{ summary()?.resolved_incidents ?? '—' }}
+      </strong>
+    </article>
+
   </div>
 
-  <!-- EMPTY -->
-  <div class="empty-state" *ngIf="!loading && incidents.length === 0">
-    <span>🛡️</span>
-    <h3>No Security Incidents</h3>
-    <p>No incidents have been recorded yet.</p>
-  </div>
+  <section class="panel">
 
-  <!-- INCIDENT CARDS -->
-  <div class="incident-list" *ngIf="!loading && incidents.length > 0">
-    <article class="incident-card" *ngFor="let incident of incidents">
-      <div class="incident-top">
-        <div class="incident-title">
-          <span class="incident-indicator" [ngClass]="getSeverityClass(incident.severity)"> </span>
+    <h3>Incident Filters</h3>
 
-          <div>
-            <h3>{{ incident.title }}</h3>
-            <p class="incident-id">ID: {{ incident.id }}</p>
-          </div>
+    <div class="filters">
+
+      <label>
+        Status
+        <select [(ngModel)]="statusFilter">
+          <option value="">All statuses</option>
+          @for (status of statuses; track status) {
+            <option [value]="status">
+              {{ readable(status) | titlecase }}
+            </option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Severity
+        <select [(ngModel)]="severityFilter">
+          <option value="">All severities</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </label>
+
+      <label>
+        Attack family
+        <select [(ngModel)]="familyFilter">
+          <option value="">All families</option>
+          @for (family of families; track family) {
+            <option [value]="family">{{ family }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Exact source identifier
+        <input [(ngModel)]="sourceFilter"
+               maxlength="100"
+               placeholder="multiclass_replay" />
+      </label>
+
+    </div>
+
+    <div class="controls">
+      <button class="primary"
+              (click)="applyFilters()"
+              [disabled]="loading()">
+        Apply Filters
+      </button>
+
+      <button (click)="clearFilters()"
+              [disabled]="loading()">
+        Clear Filters
+      </button>
+    </div>
+
+  </section>
+
+  @if (error()) {
+    <div class="error" role="alert">{{ error() }}</div>
+  }
+
+  <section class="panel">
+
+    <h3>Security Incidents</h3>
+
+    <p>{{ total() }} matching incidents</p>
+
+    <div class="table-container">
+
+      <table>
+
+        <thead>
+          <tr>
+            <th>Attack family</th>
+            <th>Severity</th>
+            <th>Risk score</th>
+            <th>Status</th>
+            <th>Device</th>
+            <th>Created</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+
+          @for (row of incidents(); track row.incident_id) {
+
+            <tr>
+              <td>{{ row.predicted_family }}</td>
+
+              <td>
+                <span class="tag"
+                      [attr.data-risk]="row.severity">
+                  {{ row.severity | titlecase }}
+                </span>
+              </td>
+
+              <td>{{ row.risk_score | number:'1.2-2' }}</td>
+
+              <td>{{ readable(row.status) | titlecase }}</td>
+
+              <td>
+                {{ row.requested_device_identifier || 'Unknown' }}
+              </td>
+
+              <td>{{ row.created_at | date:'medium' }}</td>
+
+              <td>
+                <button
+                  (click)="openIncident(row.incident_id)"
+                  [disabled]="updating()">
+                  Investigate
+                </button>
+              </td>
+
+            </tr>
+
+          } @empty {
+            <tr>
+              <td colspan="7">
+                {{ loading() ? 'Loading...' : 'No matching incidents.' }}
+              </td>
+            </tr>
+          }
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+    <div class="pagination">
+
+      <button (click)="previousPage()"
+              [disabled]="loading() || offset() === 0">
+        Previous
+      </button>
+
+      <span>Page {{ offset() / pageSize + 1 }}</span>
+
+      <button (click)="nextPage()"
+              [disabled]="loading() ||
+                          offset() + pageSize >= total()">
+        Next
+      </button>
+
+    </div>
+
+  </section>
+
+  @if (detailLoading()) {
+    <div class="notice" role="status">
+      Loading incident investigation...
+    </div>
+  }
+
+  @if (detailError()) {
+    <div class="error" role="alert">{{ detailError() }}</div>
+  }
+
+  @if (selected(); as incident) {
+
+    <section class="panel">
+
+      <header class="section-header">
+        <div>
+          <h3>{{ incident.title }}</h3>
+          <p class="identifier">{{ incident.incident_id }}</p>
         </div>
 
-        <div class="badges">
-          <span class="severity-badge" [ngClass]="getSeverityClass(incident.severity)">
-            {{ incident.severity | uppercase }}
-          </span>
+        <button (click)="closeIncident()"
+                [disabled]="updating()">
+          Close
+        </button>
+      </header>
 
-          <span class="status-badge" [ngClass]="getStatusClass(incident.status)">
-            {{ incident.status.replace('_', ' ') | titlecase }}
-          </span>
-        </div>
+      <p>{{ incident.description }}</p>
+
+      <div class="metrics">
+
+        <article>
+          <small>Predicted family</small>
+          <strong>{{ incident.predicted_family }}</strong>
+        </article>
+
+        <article>
+          <small>Attack probability</small>
+          <strong>
+            {{ incident.calibrated_attack_probability * 100
+               | number:'1.2-2' }}%
+          </strong>
+        </article>
+
+        <article>
+          <small>Risk score</small>
+          <strong>{{ incident.risk_score | number:'1.2-2' }}</strong>
+        </article>
+
+        <article>
+          <small>Incident status</small>
+          <strong>{{ readable(incident.status) | titlecase }}</strong>
+        </article>
+
       </div>
 
-      <p class="incident-description">
-        {{ incident.description || 'No description available.' }}
+      <p>
+        Recommended action:
+        {{ readable(incident.recommended_action) }}
       </p>
 
-      <div class="incident-details">
-        <div class="detail-item">
-          <span class="detail-label">Created</span>
-          <span>{{ incident.created_at | date: 'medium' }}</span>
-        </div>
+      <h3>Incident Lifecycle</h3>
 
-        <div class="detail-item" *ngIf="incident.device_id">
-          <span class="detail-label">Device ID</span>
-          <span class="device-value">{{ incident.device_id }}</span>
-        </div>
+      <div class="lifecycle">
 
-        <div class="detail-item" *ngIf="incident.resolved_at">
-          <span class="detail-label">Resolved</span>
-          <span>{{ incident.resolved_at | date: 'medium' }}</span>
-        </div>
+        @for (status of statuses; track status) {
+          <span [class.current]="status === incident.status">
+            {{ readable(status) | titlecase }}
+          </span>
+        }
+
       </div>
 
-      <div class="incident-actions">
-        <div class="status-control">
-          <label for="status-{{ incident.id }}">Update incident status</label>
+      @if (incident.allowed_next_statuses?.length) {
 
-          <select
-            id="status-{{ incident.id }}"
-            #statusSelect
-            [value]="incident.status"
-            [disabled]="updatingIncidentId === incident.id"
-          >
-            <option value="open" disabled>Open</option>
-            <option value="acknowledged">Acknowledged</option>
-            <option value="investigating">Investigating</option>
-            <option value="resolved">Resolved</option>
-            <option value="false_positive">False Positive</option>
-          </select>
+        <div class="filters">
+
+          <label>
+            Analyst name
+            <input [(ngModel)]="actorName"
+                   maxlength="100"
+                   [disabled]="updating()"
+                   placeholder="Demo analyst" />
+          </label>
+
+          <label>
+            Next status
+            <select [(ngModel)]="nextStatus"
+                    [disabled]="updating()">
+
+              <option value="">Select next status</option>
+
+              @for (
+                status of incident.allowed_next_statuses;
+                track status
+              ) {
+                <option [value]="status">
+                  {{ readable(status) | titlecase }}
+                </option>
+              }
+
+            </select>
+          </label>
+
         </div>
+
+        <label>
+          Investigation reason
+          <textarea [(ngModel)]="reason"
+                    maxlength="1000"
+                    rows="3"
+                    [disabled]="updating()"
+                    placeholder="Explain why the status is changing.">
+          </textarea>
+        </label>
+
+        <button class="primary"
+                (click)="updateStatus()"
+                [disabled]="updating() ||
+                            !nextStatus ||
+                            !actorName.trim() ||
+                            !reason.trim()">
+          {{ updating() ? 'Updating...' : 'Update Incident Status' }}
+        </button>
+
+      } @else {
+
+        <div class="notice">
+          No further status transitions are available.
+        </div>
+
+      }
+
+      @if (success()) {
+        <div class="success" role="status">{{ success() }}</div>
+      }
+
+      <div class="controls">
 
         <button
-          class="update-button"
-          [disabled]="updatingIncidentId === incident.id || statusSelect.value === incident.status"
-          (click)="updateStatus(incident.id, $any(statusSelect.value))"
-        >
-          {{ updatingIncidentId === incident.id ? 'Updating...' : 'Update Status' }}
+          (click)="openIncident(incident.incident_id)"
+          [disabled]="updating()">
+          Refresh Investigation
         </button>
+
+        <button
+          (click)="loadResponse()"
+          [disabled]="responseLoading() || !incident.response_id">
+          {{ responseLoading()
+            ? 'Loading response...'
+            : 'View Response Policy' }}
+        </button>
+
       </div>
-    </article>
-  </div>
+
+    </section>
+
+    <section class="panel">
+
+      <h3>Incident Audit Timeline</h3>
+
+      @for (event of audit(); track $index) {
+
+        <article class="audit-event">
+
+          <strong>
+            {{ event.event_sequence ?? ($index + 1) }}.
+            {{ readable(event.action) | titlecase }}
+          </strong>
+
+          <p>
+            {{ event.previous_status || 'Initial registration' }}
+            →
+            {{ readable(event.new_status) }}
+          </p>
+
+          <p>{{ event.reason }}</p>
+
+          <small>
+            {{ event.actor_name || event.actor || 'System' }}
+            ·
+            {{ (event.created_at || event.timestamp) | date:'medium' }}
+          </small>
+
+          <small>
+            Authenticated:
+            {{ event.actor_authenticated ? 'Yes' : 'No' }}
+          </small>
+
+        </article>
+
+      } @empty {
+        <p>No audit events returned.</p>
+      }
+
+    </section>
+
+    @if (response(); as record) {
+
+      <app-response-policy [plan]="record.response_plan" />
+
+    }
+
+  }
+
 </section>

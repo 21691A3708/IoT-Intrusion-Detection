@@ -1,0 +1,136 @@
+
+<section class="assistant-page">
+
+  <header class="section-header">
+
+    <div>
+      <span class="eyebrow">SECURITY INTELLIGENCE</span>
+
+      <h2>AI Security Assistant</h2>
+
+      <p>
+        Multiclass attack knowledge and investigation guidance.
+      </p>
+    </div>
+
+    <button
+      (click)="clear()"
+      [disabled]="busy()">
+      Clear Conversation
+    </button>
+
+  </header>
+
+  <div class="notice">
+    Rule-based academic assistant with current incident statistics.
+    No autonomous containment or real network execution.
+  </div>
+
+  <section class="chat-panel">
+
+    <div class="chat-header">
+
+      <div class="avatar">AI</div>
+
+      <div>
+        <strong>IoT Sentinel Assistant</strong>
+        <small>Security Knowledge Engine</small>
+      </div>
+
+    </div>
+
+    <div
+      class="chat-history"
+      role="log"
+      aria-live="polite">
+
+      @for (message of messages(); track $index) {
+
+        <article
+          class="message"
+          [class.user]="message.role === 'user'">
+
+          <strong>
+            {{ message.role === 'user'
+               ? 'You'
+               : 'IoT Sentinel Assistant' }}
+          </strong>
+
+          <div class="message-content">
+            {{ message.content }}
+          </div>
+
+          <small>
+            {{ message.timestamp | date:'shortTime' }}
+          </small>
+
+        </article>
+
+      }
+
+      @if (busy()) {
+        <p role="status">
+          Retrieving security information...
+        </p>
+      }
+
+    </div>
+
+    <div class="suggestion-panel">
+
+      <h3>Suggested Questions</h3>
+
+      <div class="suggestions">
+
+        @for (suggestion of suggestions; track suggestion) {
+
+          <button
+            (click)="send(suggestion)"
+            [disabled]="busy()">
+
+            {{ suggestion }}
+
+          </button>
+
+        }
+
+      </div>
+
+    </div>
+
+    <form (ngSubmit)="send()">
+
+      <label for="security-question">
+        Ask a security question
+      </label>
+
+      <textarea
+        id="security-question"
+        [(ngModel)]="question"
+        name="question"
+        rows="3"
+        maxlength="2000"
+        [disabled]="busy()"
+        placeholder="Ask about attacks, incidents, SHAP or risk...">
+      </textarea>
+
+      <div class="form-footer">
+
+        <small>{{ question.length }}/2000</small>
+
+        <button
+          type="submit"
+          class="primary"
+          [disabled]="busy() || !question.trim()">
+
+          {{ busy() ? 'Processing...' : 'Send Message' }}
+
+        </button>
+
+      </div>
+
+    </form>
+
+  </section>
+
+</section>

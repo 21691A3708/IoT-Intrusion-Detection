@@ -1,0 +1,198 @@
+{
+  "generated_at": "2026-11-27T02:44:13.234568+00:00",
+  "total_checks": 38,
+  "passed": 38,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Security Dashboard",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\dashboard"
+    },
+    {
+      "name": "Intrusion Detection",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\detection"
+    },
+    {
+      "name": "Live Traffic Monitor",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\multiclass-monitor"
+    },
+    {
+      "name": "Incident Management",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\incident-management"
+    },
+    {
+      "name": "IoT Device Management",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\devices"
+    },
+    {
+      "name": "Explainable AI",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\explainability"
+    },
+    {
+      "name": "Incident Response Center",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\response-center"
+    },
+    {
+      "name": "Reports and Batch Analysis",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\batch-reports"
+    },
+    {
+      "name": "AI Security Assistant",
+      "passed": true,
+      "details": "frontend\\src\\app\\components\\security-assistant"
+    },
+    {
+      "name": "Multiclass model",
+      "passed": true,
+      "details": "/api/multiclass/model-info"
+    },
+    {
+      "name": "Device profiles",
+      "passed": true,
+      "details": "/api/multiclass/device-profiles"
+    },
+    {
+      "name": "Incident management",
+      "passed": true,
+      "details": "/api/multiclass/incidents/info"
+    },
+    {
+      "name": "Incident summary",
+      "passed": true,
+      "details": "/api/multiclass/incidents/summary"
+    },
+    {
+      "name": "Incident listing",
+      "passed": true,
+      "details": "/api/multiclass/incidents?limit=1"
+    },
+    {
+      "name": "Response policy",
+      "passed": true,
+      "details": "/api/multiclass/response-policy"
+    },
+    {
+      "name": "Persistent response info",
+      "passed": true,
+      "details": "/api/persistent-responses/info"
+    },
+    {
+      "name": "Persistent response listing",
+      "passed": true,
+      "details": "/api/persistent-responses?limit=1"
+    },
+    {
+      "name": "POST /api/multiclass/predict",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "POST /api/multiclass/predict-batch",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "POST /api/multiclass/explain",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "POST /api/multiclass/assess-risk",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "POST /api/multiclass/compare-contexts",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "POST /api/multiclass/plan-response",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "POST /api/persistent-responses",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "PATCH /api/multiclass/incidents/{incident_id}/status",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "name": "models/random_forest_multiclass_calibrated.joblib",
+      "passed": true,
+      "details": "40.51 MB"
+    },
+    {
+      "name": "data/processed/multiclass/verified/train.csv",
+      "passed": true,
+      "details": "210.29 MB"
+    },
+    {
+      "name": "data/processed/multiclass/verified/validation.csv",
+      "passed": true,
+      "details": "43.52 MB"
+    },
+    {
+      "name": "data/processed/multiclass/verified/test.csv",
+      "passed": true,
+      "details": "45.95 MB"
+    },
+    {
+      "name": "results/multiclass/batch_test_datasets/seven_attack_samples.csv",
+      "passed": true,
+      "details": "0.00 MB"
+    },
+    {
+      "name": "results/multiclass/batch_test_datasets/batch_test_100.csv",
+      "passed": true,
+      "details": "0.02 MB"
+    },
+    {
+      "name": "results/multiclass/batch_test_datasets/batch_test_2500.csv",
+      "passed": true,
+      "details": "0.60 MB"
+    },
+    {
+      "name": "frontend/public/test-samples/samples.json",
+      "passed": true,
+      "details": "0.01 MB"
+    },
+    {
+      "name": "simulation_only",
+      "passed": true,
+      "details": "Expected=True, Actual=True"
+    },
+    {
+      "name": "real_network_execution_enabled",
+      "passed": true,
+      "details": "Expected=False, Actual=False"
+    },
+    {
+      "name": "persistent_approval_enabled",
+      "passed": true,
+      "details": "Expected=False, Actual=False"
+    },
+    {
+      "name": "persistent_execution_enabled",
+      "passed": true,
+      "details": "Expected=False, Actual=False"
+    },
+    {
+      "name": "persistent_rollback_enabled",
+      "passed": true,
+      "details": "Expected=False, Actual=False"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "batch_tests": [
+    {
+      "records": 1,
+      "elapsed_seconds": 0.05905700000585057,
+      "records_per_second": 16.932793739961962
+    },
+    {
+      "records": 7,
+      "elapsed_seconds": 0.05580849999387283,
+      "records_per_second": 125.42892213136932
+    },
+    {
+      "records": 100,
+      "elapsed_seconds": 0.16013309999834746,
+      "records_per_second": 624.480510281959
+    },
+    {
+      "records": 1000,
+      "elapsed_seconds": 1.0045975999964867,
+      "records_per_second": 995.4234411902808
+    }
+  ],
+  "incident_summary": {
+    "total_incidents": 7,
+    "open_incidents": 6,
+    "acknowledged_incidents": 1,
+    "investigating_incidents": 0,
+    "resolved_incidents": 0,
+    "false_positive_incidents": 0,
+    "low_incidents": 0,
+    "medium_incidents": 0,
+    "high_incidents": 3,
+    "critical_incidents": 4,
+    "active_critical_incidents": 4,
+    "active_incidents": 7,
+    "storage_mode": "postgresql",
+    "simulation_only": true
+  },
+  "persistent_counts_unchanged": true,
+  "invalid_input_rejected": true
+}

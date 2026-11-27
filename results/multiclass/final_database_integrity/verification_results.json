@@ -1,0 +1,221 @@
+{
+  "generated_at": "2026-11-27T02:55:06.582789+00:00",
+  "schema": "multiclass",
+  "read_only_verification": true,
+  "table_counts": {
+    "predictions": 9,
+    "risk_assessments": 9,
+    "incidents": 7,
+    "response_records": 9,
+    "response_audit_logs": 9,
+    "incident_audit_logs": 8
+  },
+  "total_checks": 31,
+  "passed": 31,
+  "failed": 0,
+  "checks": [
+    {
+      "check": "Database connection",
+      "passed": true,
+      "details": null
+    },
+    {
+      "check": "Table accessible: predictions",
+      "passed": true,
+      "details": {
+        "records": 9
+      }
+    },
+    {
+      "check": "Table accessible: risk_assessments",
+      "passed": true,
+      "details": {
+        "records": 9
+      }
+    },
+    {
+      "check": "Table accessible: incidents",
+      "passed": true,
+      "details": {
+        "records": 7
+      }
+    },
+    {
+      "check": "Table accessible: response_records",
+      "passed": true,
+      "details": {
+        "records": 9
+      }
+    },
+    {
+      "check": "Table accessible: response_audit_logs",
+      "passed": true,
+      "details": {
+        "records": 9
+      }
+    },
+    {
+      "check": "Table accessible: incident_audit_logs",
+      "passed": true,
+      "details": {
+        "records": 8
+      }
+    },
+    {
+      "check": "Risk assessments reference predictions",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Incidents reference risk assessments",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Responses reference risk assessments",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Response audits reference responses",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Incident audits reference incidents",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Valid risk score range",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Valid risk level classification",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Valid calibrated attack probabilities",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Every incident has an audit history",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Latest audit status matches incident status",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Incident audit sequences are continuous",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Incident audit transition chain is consistent",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Incident registration events are valid",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "No real network actions",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "All responses remain simulation-only",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "No unauthorized persistent containment",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Every response has audit history",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Latest response audit matches current status",
+      "passed": true,
+      "details": {
+        "violations": 0
+      }
+    },
+    {
+      "check": "Row-level security enabled: predictions",
+      "passed": true,
+      "details": null
+    },
+    {
+      "check": "Row-level security enabled: risk_assessments",
+      "passed": true,
+      "details": null
+    },
+    {
+      "check": "Row-level security enabled: incidents",
+      "passed": true,
+      "details": null
+    },
+    {
+      "check": "Row-level security enabled: response_records",
+      "passed": true,
+      "details": null
+    },
+    {
+      "check": "Row-level security enabled: response_audit_logs",
+      "passed": true,
+      "details": null
+    },
+    {
+      "check": "Row-level security enabled: incident_audit_logs",
+      "passed": true,
+      "details": null
+    }
+  ]
+}

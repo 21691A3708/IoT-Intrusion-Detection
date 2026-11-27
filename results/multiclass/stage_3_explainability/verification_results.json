@@ -1,0 +1,92 @@
+[
+  {
+    "sample": "benign",
+    "predicted_family": "Benign",
+    "explained_family": "Benign",
+    "top_n": 10,
+    "shap_latency_ms": 1684.402400002,
+    "family_additivity_error": 8.881784197001252e-16,
+    "attack_additivity_error": 8.881784197001252e-16
+  },
+  {
+    "sample": "ddos",
+    "predicted_family": "DDoS",
+    "explained_family": "DDoS",
+    "top_n": 10,
+    "shap_latency_ms": 876.480699997046,
+    "family_additivity_error": 3.1086244689504383e-15,
+    "attack_additivity_error": 0.0
+  },
+  {
+    "sample": "dos",
+    "predicted_family": "DoS",
+    "explained_family": "DoS",
+    "top_n": 10,
+    "shap_latency_ms": 960.8481999966898,
+    "family_additivity_error": 3.774758283725532e-15,
+    "attack_additivity_error": 4.440892098500626e-16
+  },
+  {
+    "sample": "reconnaissance",
+    "predicted_family": "Reconnaissance",
+    "explained_family": "Reconnaissance",
+    "top_n": 10,
+    "shap_latency_ms": 1062.177599997085,
+    "family_additivity_error": 0.0,
+    "attack_additivity_error": 2.886579864025407e-15
+  },
+  {
+    "sample": "spoofing",
+    "predicted_family": "Benign",
+    "explained_family": "Benign",
+    "top_n": 10,
+    "shap_latency_ms": 982.9574999967008,
+    "family_additivity_error": 3.3306690738754696e-16,
+    "attack_additivity_error": 3.3306690738754696e-16
+  },
+  {
+    "sample": "mirai",
+    "predicted_family": "Mirai",
+    "explained_family": "Mirai",
+    "top_n": 10,
+    "shap_latency_ms": 872.0205999998143,
+    "family_additivity_error": 4.440892098500626e-16,
+    "attack_additivity_error": 4.440892098500626e-16
+  },
+  {
+    "sample": "webbased",
+    "predicted_family": "WebBased",
+    "explained_family": "WebBased",
+    "top_n": 10,
+    "shap_latency_ms": 931.5505999984453,
+    "family_additivity_error": 9.992007221626409e-16,
+    "attack_additivity_error": 8.881784197001252e-16
+  },
+  {
+    "sample": "mirai",
+    "predicted_family": "Mirai",
+    "explained_family": "Benign",
+    "top_n": 5,
+    "shap_latency_ms": 919.1307000000961,
+    "family_additivity_error": 4.3021142204224816e-16,
+    "attack_additivity_error": 4.440892098500626e-16
+  },
+  {
+    "sample": "mirai",
+    "predicted_family": "Mirai",
+    "explained_family": "Mirai",
+    "top_n": 20,
+    "shap_latency_ms": 883.5772999955225,
+    "family_additivity_error": 4.440892098500626e-16,
+    "attack_additivity_error": 4.440892098500626e-16
+  },
+  {
+    "sample": "mirai",
+    "predicted_family": "Mirai",
+    "explained_family": "Mirai",
+    "top_n": 36,
+    "shap_latency_ms": 939.8112000053516,
+    "family_additivity_error": 4.440892098500626e-16,
+    "attack_additivity_error": 4.440892098500626e-16
+  }
+]

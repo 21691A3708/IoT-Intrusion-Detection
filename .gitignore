@@ -24,3 +24,71 @@ data/
 # Operating system files
 .DS_Store
 Thumbs.db
+
+
+# ==========================================
+# IoT Sentinel - Git Ignore Configuration
+# ==========================================
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local datasets
+data/
+
+# Jupyter temporary files
+.ipynb_checkpoints/
+
+# Environment variables and credentials
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Node.js dependencies
+node_modules/
+
+# Angular generated files
+frontend/dist/
+frontend/.angular/
+frontend/coverage/
+
+# Local backups and archives
+backups/
+*.zip
+*.bak
+
+# Large row-level experimental outputs
+results/**/test_predictions.csv
+results/**/validation_predictions.csv
+results/**/heldout_predictions.csv
+results/**/calibrated_validation_predictions.csv
+results/**/random_forest_test_predictions.csv
+results/**/*_misclassifications.csv
+
+# Local runtime files
+*.log
+*.sqlite
+*.sqlite3
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Unclassified local file
+/dasd

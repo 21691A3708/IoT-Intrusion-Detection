@@ -1,0 +1,175 @@
+﻿.notification-container {
+
+  position: fixed;
+
+  top: 24px;
+  right: 24px;
+
+  width: min(380px, calc(100vw - 32px));
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 12px;
+
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+
+  z-index: 11000;
+
+  pointer-events: none;
+
+}
+
+.notification {
+
+  --accent: #38bdf8;
+
+  display: flex;
+  align-items: flex-start;
+
+  gap: 12px;
+  padding: 16px;
+
+  border: 1px solid #304158;
+  border-left: 4px solid var(--accent);
+
+  border-radius: 12px;
+
+  background: #142033;
+
+  color: #f1f5f9;
+
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .3);
+
+  pointer-events: auto;
+
+  animation: notification-enter .2s ease-out;
+
+}
+
+.notification.success {
+  --accent: #22c55e;
+}
+
+.notification.error {
+  --accent: #ef4444;
+}
+
+.notification.warning {
+  --accent: #f59e0b;
+}
+
+.notification.info {
+  --accent: #38bdf8;
+}
+
+.notification-icon {
+
+  flex-shrink: 0;
+  color: var(--accent);
+
+}
+
+.notification-content {
+
+  flex: 1;
+  min-width: 0;
+
+  overflow-wrap: anywhere;
+
+}
+
+.notification-content strong {
+
+  font-size: 14px;
+  font-weight: 600;
+
+}
+
+.notification-content p {
+
+  margin: 5px 0 0;
+
+  color: #aab9cd;
+
+  font-size: 13px;
+  line-height: 1.5;
+
+}
+
+.dismiss-button {
+
+  display: grid;
+  place-items: center;
+
+  width: 30px;
+  height: 30px;
+
+  border: 0;
+  border-radius: 6px;
+
+  background: transparent;
+
+  color: #94a3b8;
+
+  cursor: pointer;
+
+  flex-shrink: 0;
+
+}
+
+.dismiss-button:hover {
+
+  color: #fff;
+  background: #26364c;
+
+}
+
+.dismiss-button:focus-visible {
+
+  outline: 2px solid #38bdf8;
+
+}
+
+@keyframes notification-enter {
+
+  from {
+
+    opacity: 0;
+    transform: translateY(-8px);
+
+  }
+
+  to {
+
+    opacity: 1;
+    transform: translateY(0);
+
+  }
+
+}
+
+@media (max-width: 600px) {
+
+  .notification-container {
+
+    top: 16px;
+    right: 16px;
+    left: 16px;
+
+    width: auto;
+
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .notification {
+
+    animation: none;
+
+  }
+
+}

@@ -1,0 +1,299 @@
+﻿<section class="context-panel">
+
+  <header class="context-header">
+
+    <div class="heading-content">
+
+      <div class="heading-icon">
+
+        <svg viewBox="0 0 24 24"
+             width="24"
+             height="24"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="1.7"
+             aria-hidden="true">
+
+          <rect x="9" y="2" width="6" height="6" rx="1"/>
+          <rect x="2" y="16" width="6" height="6" rx="1"/>
+          <rect x="16" y="16" width="6" height="6" rx="1"/>
+          <path d="M12 8v4M5 16v-4h14v4"/>
+
+        </svg>
+
+      </div>
+
+      <div>
+
+        <h3>Device Security Context</h3>
+
+        <p>Select a demonstration profile for risk assessment.</p>
+
+      </div>
+
+    </div>
+
+    <button
+      type="button"
+      class="secondary-button"
+      (click)="refreshProfiles()"
+      [disabled]="disabled() || context.loading()">
+
+      Refresh Profiles
+
+    </button>
+
+  </header>
+
+  <div class="notice">
+
+    Device profiles provide security context only.
+    They do not establish physical device identity
+    or authorize containment.
+
+  </div>
+
+  @if (context.loading()) {
+
+    <div class="state-message" role="status">
+
+      <span class="spinner"></span>
+
+      Loading device profiles...
+
+    </div>
+
+  } @else if (context.error()) {
+
+    <div class="state-message error" role="alert">
+
+      {{ context.error() }}
+
+    </div>
+
+    <button
+      type="button"
+      class="secondary-button"
+      (click)="refreshProfiles()"
+      [disabled]="disabled()">
+
+      Retry
+
+    </button>
+
+  } @else if (context.loaded()) {
+
+    <div class="selection-field">
+
+      <label>
+
+        Device Context Profile
+
+        <select
+          [value]="context.selectedDeviceId() ?? ''"
+          (change)="changeContext($event)"
+          [disabled]="disabled()">
+
+          <option value="">
+
+            Unknown Device - Fallback Context
+
+          </option>
+
+          @for (profile of context.profiles(); track profile.device_id) {
+
+            <option [value]="profile.device_id">
+
+              {{ profile.device_name }} - {{ profile.device_id }}
+
+            </option>
+
+          }
+
+        </select>
+
+      </label>
+
+      <button
+        type="button"
+        class="secondary-button"
+        (click)="clearContext()"
+        [disabled]="disabled() || !context.selectedDeviceId()">
+
+        Clear Selection
+
+      </button>
+
+    </div>
+
+    @if (context.selectedProfile(); as profile) {
+
+      <div class="profile-information">
+
+        <div>
+
+          <h4>{{ profile.device_name }}</h4>
+
+          <p>{{ profile.business_function }}</p>
+
+        </div>
+
+        <span class="chip">{{ profile.device_id }}</span>
+
+      </div>
+
+      <div class="metrics-grid">
+
+        <article class="metric-card">
+
+          <span>Device Criticality</span>
+
+          <strong
+            [class.high-criticality]="profile.criticality >= 0.9">
+
+            {{ profile.criticality * 100 | number:'1.0-1' }}%
+
+          </strong>
+
+          <div class="meter"
+               role="meter"
+               aria-label="Device criticality"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               [attr.aria-valuenow]="profile.criticality * 100">
+
+            <div class="criticality-fill"
+                 [class.high]="profile.criticality >= 0.9"
+                 [style.width.%]="profile.criticality * 100">
+            </div>
+
+          </div>
+
+        </article>
+
+        <article class="metric-card">
+
+          <span>Network Exposure</span>
+
+          <strong class="blue">
+
+            {{ profile.exposure * 100 | number:'1.0-1' }}%
+
+          </strong>
+
+          <div class="meter"
+               role="meter"
+               aria-label="Network exposure"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               [attr.aria-valuenow]="profile.exposure * 100">
+
+            <div class="exposure-fill"
+                 [style.width.%]="profile.exposure * 100">
+            </div>
+
+          </div>
+
+        </article>
+
+      </div>
+
+      <div class="policy-list">
+
+        <div class="policy-row">
+
+          <span>Context source</span>
+
+          <strong>Demonstration inventory</strong>
+
+        </div>
+
+        <div class="policy-row">
+
+          <span>Identity verification</span>
+
+          <strong class="warning">Unverified</strong>
+
+        </div>
+
+        <div class="policy-row">
+
+          <span>Profile containment policy</span>
+
+          <strong
+            [class.warning]="!profile.containment_allowed">
+
+            {{ profile.containment_allowed
+                ? 'Consideration permitted'
+                : 'Restricted' }}
+
+          </strong>
+
+        </div>
+
+        <div class="policy-row">
+
+          <span>Containment authorization</span>
+
+          <strong class="warning">Not authorized</strong>
+
+        </div>
+
+      </div>
+
+    } @else {
+
+      <div class="fallback-panel">
+
+        <h4>Unknown Device Context</h4>
+
+        <p>
+          No demonstration device profile is selected.
+          The backend will use its conservative fallback
+          when risk assessment is requested.
+        </p>
+
+        <div class="metrics-grid">
+
+          <article class="metric-card">
+
+            <span>Fallback Criticality</span>
+
+            <strong>50%</strong>
+
+          </article>
+
+          <article class="metric-card">
+
+            <span>Fallback Exposure</span>
+
+            <strong class="blue">50%</strong>
+
+          </article>
+
+        </div>
+
+        <div class="policy-row">
+
+          <span>Containment policy</span>
+
+          <strong class="warning">Restricted</strong>
+
+        </div>
+
+      </div>
+
+    }
+
+  }
+
+  <footer class="context-footer">
+
+    <span class="simulation-dot"></span>
+
+    Simulation only. Selecting a profile does not
+    perform risk assessment or execute network actions.
+
+  </footer>
+
+</section>

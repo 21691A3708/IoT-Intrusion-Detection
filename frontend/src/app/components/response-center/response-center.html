@@ -1,0 +1,262 @@
+﻿<section class="operations">
+
+  <header class="section-header">
+    <div>
+      <h2>Automated Incident Response Center</h2>
+      <p>Risk-aware response planning and persistent decision history.</p>
+    </div>
+
+    <button (click)="refresh()" [disabled]="loading()">
+      Refresh Records
+    </button>
+  </header>
+
+  <div class="notice">
+    Simulation-only security operations.
+    Persistent approval, real containment and network execution
+    are disabled in this academic prototype.
+  </div>
+
+  @if (error()) {
+    <div class="error" role="alert">{{ error() }}</div>
+  }
+
+  <section class="panel">
+
+    <h3>Response Planning</h3>
+
+    <p>
+      Evaluate the recommended response without creating
+      an incident or executing containment.
+    </p>
+
+    <label>
+      Network traffic sample
+
+      <select [(ngModel)]="selectedSample"
+              (ngModelChange)="plan.set(null)"
+              [disabled]="planning()">
+
+        <option value="">Select a traffic sample</option>
+
+        @for (sample of samples(); track sample.id) {
+          <option [value]="sample.id">{{ sample.family }}</option>
+        }
+
+      </select>
+
+    </label>
+
+    <app-device-context-selector [disabled]="planning()" />
+
+    <div class="controls">
+
+      <button class="primary"
+              (click)="generatePlan()"
+              [disabled]="planning() ||
+                          context.loading() ||
+                          !selectedSample">
+
+        {{ planning()
+          ? 'Evaluating Response Policy...'
+          : 'Generate Response Plan' }}
+
+      </button>
+
+    </div>
+
+  </section>
+
+  @if (plan(); as result) {
+
+    <div class="notice">
+      Evaluated device:
+      {{ result.response_plan.device_name }}.
+      Generate a new plan after changing device context.
+      No incident was created and no response was executed.
+    </div>
+
+    <app-response-policy [plan]="result.response_plan" />
+
+  }
+
+  <section class="panel">
+
+    <h3>Persistent Response History</h3>
+
+    <p>{{ total() }} stored response records</p>
+
+    <div class="table-container">
+
+      <table>
+
+        <thead>
+          <tr>
+            <th>Attack family</th>
+            <th>Risk score</th>
+            <th>Risk level</th>
+            <th>Response status</th>
+            <th>Incident</th>
+            <th>Created</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+
+          @for (row of records(); track row.response_id) {
+
+            <tr>
+
+              <td>{{ row.predicted_family }}</td>
+
+              <td>{{ row.risk_score | number:'1.2-2' }}</td>
+
+              <td>
+                <span class="tag"
+                      [attr.data-risk]="row.risk_level">
+                  {{ row.risk_level | titlecase }}
+                </span>
+              </td>
+
+              <td>{{ readable(row.status) | titlecase }}</td>
+
+              <td>{{ row.incident_created ? 'Created' : 'No' }}</td>
+
+              <td>{{ row.created_at | date:'medium' }}</td>
+
+              <td>
+                <button (click)="inspectResponse(row.response_id)">
+                  Inspect
+                </button>
+              </td>
+
+            </tr>
+
+          } @empty {
+
+            <tr>
+              <td colspan="7">
+                {{ loading() ? 'Loading...' : 'No response records.' }}
+              </td>
+            </tr>
+
+          }
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+    <div class="pagination">
+
+      <button (click)="previousPage()"
+              [disabled]="loading() || offset() === 0">
+        Previous
+      </button>
+
+      <span>Page {{ offset() / pageSize + 1 }}</span>
+
+      <button (click)="nextPage()"
+              [disabled]="loading() ||
+                          offset() + pageSize >= total()">
+        Next
+      </button>
+
+    </div>
+
+  </section>
+
+  @if (detailLoading()) {
+    <div class="notice">Loading response details...</div>
+  }
+
+  @if (selected(); as record) {
+
+    <section class="panel">
+
+      <header class="section-header">
+        <div>
+          <h3>Persistent Response Details</h3>
+          <p class="identifier">{{ record.response_id }}</p>
+        </div>
+
+        <button (click)="closeResponse()">Close</button>
+      </header>
+
+      <div class="metrics">
+
+        <article>
+          <small>Response status</small>
+          <strong>{{ readable(record.status) }}</strong>
+        </article>
+
+        <article>
+          <small>Approval granted</small>
+          <strong>{{ record.approval_granted ? 'Yes' : 'No' }}</strong>
+        </article>
+
+        <article>
+          <small>Simulation executed</small>
+          <strong>{{ record.simulation_executed ? 'Yes' : 'No' }}</strong>
+        </article>
+
+        <article>
+          <small>Real network action</small>
+          <strong>
+            {{ record.real_network_action_executed ? 'Yes' : 'No' }}
+          </strong>
+        </article>
+
+      </div>
+
+      <p>Incident status: {{ record.incident_status || 'No incident' }}</p>
+
+      <div class="notice">
+        Stored response decisions are read-only.
+        Approval and execution are unavailable.
+      </div>
+
+    </section>
+
+    <app-response-policy [plan]="record.response_plan" />
+
+    <section class="panel">
+
+      <h3>Response Audit Timeline</h3>
+
+      @for (event of record.audit_logs; track $index) {
+
+        <article class="audit-event">
+
+          <strong>{{ readable(event.action) | titlecase }}</strong>
+
+          <p>
+            {{ event.previous_status || 'Initial state' }}
+            →
+            {{ readable(event.new_status) }}
+          </p>
+
+          <small>
+            {{ event.actor_name || event.actor || 'System' }}
+            ·
+            {{ (event.created_at || event.timestamp) | date:'medium' }}
+          </small>
+
+          <small>
+            Authenticated:
+            {{ event.actor_authenticated ? 'Yes' : 'No' }}
+          </small>
+
+        </article>
+
+      } @empty {
+        <p>No response audit events returned.</p>
+      }
+
+    </section>
+
+  }
+
+</section>

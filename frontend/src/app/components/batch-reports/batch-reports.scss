@@ -1,0 +1,264 @@
+﻿:host {
+  display:block;
+  min-width:0;
+}
+
+.operations {
+  display:grid;
+  gap:20px;
+  color:#e2e8f0;
+}
+
+h2,h3 { margin:0; }
+h2 { font-size:23px; }
+h3 { font-size:17px; }
+
+p,small {
+  color:#94a3b8;
+  font-size:13px;
+  line-height:1.7;
+}
+
+.section-header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:12px;
+}
+
+.metrics,.filters {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:14px;
+  margin:16px 0;
+}
+
+.metrics article,.panel {
+  background:#152134;
+  border:1px solid #29374d;
+  border-radius:13px;
+  padding:20px;
+  min-width:0;
+}
+
+.metrics article {
+  display:grid;
+  gap:10px;
+}
+
+.metrics strong {
+  font-size:22px;
+  color:#60a5fa;
+  overflow-wrap:anywhere;
+}
+
+.metrics .critical { color:#f87171; }
+.metrics .green { color:#4ade80; }
+
+label {
+  display:grid;
+  gap:8px;
+  font-size:13px;
+  margin-bottom:12px;
+}
+
+input,select,textarea {
+  width:100%;
+  box-sizing:border-box;
+  background:#0c1524;
+  border:1px solid #35445b;
+  color:#e2e8f0;
+  padding:12px;
+  border-radius:8px;
+}
+
+textarea {
+  resize:vertical;
+  line-height:1.6;
+}
+
+button {
+  padding:10px 15px;
+  background:#23334b;
+  border:1px solid #35445b;
+  border-radius:8px;
+  color:#e2e8f0;
+  cursor:pointer;
+}
+
+button.primary { background:#2563eb; }
+
+button:disabled {
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+.controls,.pagination,.lifecycle {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:10px;
+  margin:18px 0;
+}
+
+.pagination { justify-content:space-between; }
+
+.notice,.error,.success {
+  padding:14px;
+  border-radius:9px;
+  font-size:13px;
+  line-height:1.7;
+}
+
+.notice {
+  background:#142d43;
+  color:#bfdbfe;
+  border:1px solid #245475;
+}
+
+.error {
+  background:#3b2028;
+  color:#fca5a5;
+  border:1px solid #7f3540;
+}
+
+.success {
+  background:#123126;
+  color:#bbf7d0;
+  border:1px solid #166534;
+  margin-top:12px;
+}
+
+.table-container {
+  width:100%;
+  overflow-x:auto;
+}
+
+table {
+  width:100%;
+  min-width:800px;
+  border-collapse:collapse;
+  font-size:13px;
+}
+
+th,td {
+  padding:14px 10px;
+  text-align:left;
+  border-bottom:1px solid #29374d;
+}
+
+th {
+  color:#94a3b8;
+  background:#101b2c;
+}
+
+.tag {
+  display:inline-block;
+  padding:5px 10px;
+  border-radius:20px;
+  background:#14532d;
+  color:#86efac;
+  font-size:11px;
+}
+
+.tag[data-risk="medium"] {
+  background:#713f12;
+  color:#fde68a;
+}
+
+.tag[data-risk="high"] {
+  background:#7c2d12;
+  color:#fdba74;
+}
+
+.tag[data-risk="critical"] {
+  background:#7f1d1d;
+  color:#fca5a5;
+}
+
+.identifier { overflow-wrap:anywhere; }
+
+.lifecycle span {
+  padding:9px 12px;
+  background:#23334b;
+  border-radius:7px;
+  font-size:12px;
+}
+
+.lifecycle span.current {
+  background:#1d4ed8;
+  color:#fff;
+}
+
+.audit-event {
+  display:grid;
+  gap:5px;
+  margin-top:18px;
+  padding:14px 18px;
+  border-left:3px solid #60a5fa;
+  background:#0e1929;
+  border-radius:0 8px 8px 0;
+}
+
+.audit-event p { margin:3px 0; }
+
+@media(max-width:1000px) {
+  .metrics,.filters {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media(max-width:600px) {
+  .filters { grid-template-columns:1fr; }
+  .panel,.metrics article { padding:14px; }
+  .metrics strong { font-size:18px; }
+}
+
+@media(max-width:380px) {
+  .metrics { grid-template-columns:1fr; }
+}
+
+
+progress {
+  width:100%;
+  height:14px;
+  accent-color:#3b82f6;
+}
+
+.distribution-row {
+  display:grid;
+  grid-template-columns:130px minmax(0,1fr) 110px;
+  align-items:center;
+  gap:12px;
+  margin:16px 0;
+  font-size:13px;
+}
+
+.bar-track {
+  height:12px;
+  background:#29374d;
+  border-radius:6px;
+  overflow:hidden;
+}
+
+.bar-fill {
+  height:100%;
+  background:#3b82f6;
+  border-radius:6px;
+}
+
+.bar-fill.benign {
+  background:#22c55e;
+}
+
+@media(max-width:600px) {
+  .distribution-row {
+    grid-template-columns:1fr 90px;
+  }
+
+  .bar-track {
+    grid-row:2;
+    grid-column:1 / -1;
+  }
+}

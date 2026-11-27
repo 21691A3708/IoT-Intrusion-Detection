@@ -2,51 +2,44 @@
   <!-- SIDEBAR -->
   <aside class="sidebar">
     <div class="sidebar-brand">
-      <div class="brand-icon">⬡</div>
+      <div class="brand-icon"><img src="favicon.svg" alt="" width="36" height="36"></div>
       <div>
-        <h2>NIDS</h2>
+        <h2>IoT Sentinel</h2>
         <span>Security Center</span>
       </div>
     </div>
 
-    <div class="sidebar-menu">
+    <button class="menu-toggle" type="button" (click)="menuOpen.set(!menuOpen())" [attr.aria-expanded]="menuOpen()" aria-controls="main-navigation">Menu</button>
+    <div class="sidebar-menu" [class.menu-open]="menuOpen()" id="main-navigation">
       <span class="menu-heading">MAIN MENU</span>
 
-      <nav>
-        <button type="button" class="nav-link" [class.active]="isActive('dashboard')" (click)="navigateTo('dashboard')">
-          <span class="nav-icon">⌂</span><span>Dashboard</span>
-        </button>
-        <button type="button" class="nav-link" [class.active]="isActive('alerts')" (click)="navigateTo('alerts')">
-          <span class="nav-icon">⚠</span><span>Alerts</span>
-        </button>
-        <button type="button" class="nav-link" [class.active]="isActive('devices')" (click)="navigateTo('devices')">
-          <span class="nav-icon">▣</span><span>Devices</span>
-        </button>
-        <button type="button" class="nav-link" [class.active]="isActive('traffic')" (click)="navigateTo('traffic')">
-          <span class="nav-icon">⌁</span><span>Traffic Monitor</span>
-        </button>
-        <button type="button" class="nav-link" [class.active]="isActive('analysis')" (click)="navigateTo('analysis')">
-          <span class="nav-icon">◈</span><span>Explainable AI</span>
-        </button>
-        <button type="button" class="nav-link" [class.active]="isActive('reports')" (click)="navigateTo('reports')">
-          <span class="nav-icon">▤</span><span>Reports</span>
-        </button>
+      <nav aria-label="Main navigation">
+        <a class="nav-link" routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10l9-7 9 7v11H3z M9 21v-8h6v8"/></svg></span><span>Dashboard</span>
+        </a>
+        <a class="nav-link" routerLink="/detection" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)"><span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z M12 8v5 M12 16v1"/></svg></span><span>Intrusion Detection</span></a>
+        <a class="nav-link" routerLink="/incidents" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3L2 21h20z M12 9v5 M12 17v1"/></svg></span><span>Incidents</span>
+        </a>
+        <a class="nav-link" routerLink="/response-center" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)"><span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z M8 12l3 3 5-6"/></svg></span><span>Response Center</span></a>
+        <a class="nav-link" routerLink="/devices" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h18v13H3z M8 21h8 M12 17v4"/></svg></span><span>Devices</span>
+        </a>
+        <a class="nav-link" routerLink="/traffic-monitor" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"/></svg></span><span>Traffic Monitor</span>
+        </a>
+        <a class="nav-link" routerLink="/explainability" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l10 10-10 10L2 12z M12 7v10 M7 12h10"/></svg></span><span>Explainable AI</span>
+        </a>
+        <a class="nav-link" routerLink="/reports" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h14v18H5z M8 8h8 M8 12h8 M8 16h8"/></svg></span><span>Reports</span>
+        </a>
+        <a class="nav-link" routerLink="/assistant" routerLinkActive="active" [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }" ariaCurrentWhenActive="page" (click)="menuOpen.set(false)"><span class="nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v12H9l-5 4z M8 10h8 M8 13h5"/></svg></span><span>AI Assistant</span></a>
       </nav>
     </div>
 
     <div class="sidebar-bottom">
-      <div class="sidebar-status">
-        <span
-          class="sidebar-status-dot"
-          [class.status-online]="websocketStatus() === 'connected'"
-          [class.status-offline]="websocketStatus() === 'disconnected'"
-          [class.status-warning]="websocketStatus() === 'connecting' || websocketStatus() === 'reconnecting'"
-        ></span>
-        <div>
-          <strong>Live Connection</strong>
-          <small>{{ websocketStatus() }}</small>
-        </div>
-      </div>
+
 
       <div class="sidebar-version">
         IoT Intrusion Detection
@@ -59,10 +52,10 @@
   <main class="dashboard">
     <header class="header">
       <div class="header-title">
-        <div class="header-brand-icon">⬡</div>
+        <div class="header-brand-icon"><img src="favicon.svg" alt="" width="36" height="36"></div>
         <div>
-          <h1>Network Intrusion Detection System</h1>
-          <p>{{ getPageTitle() }} · IoT Security Operations Center</p>
+          <h1>{{ getPageTitle() }}</h1>
+          <p>IoT Security Operations Center</p>
         </div>
       </div>
 
@@ -72,7 +65,7 @@
         </div>
 
         <div
-          class="websocket-status"
+          class="websocket-status" style="display: none;"
           [class.connected]="websocketStatus() === 'connected'"
           [class.reconnecting]="websocketStatus() === 'reconnecting' || websocketStatus() === 'connecting'"
           [class.disconnected]="websocketStatus() === 'disconnected'"
@@ -92,107 +85,24 @@
       </div>
     </header>
 
-    <div class="page-content">
+    <div class="page-content" id="main-content">
+
       @switch (activeView()) {
         @case ('dashboard') {
-          <section class="analytics-section">
-            <div class="analytics-heading">
-              <div>
-                <h2>Security Overview</h2>
-                <p>Monitor IoT network security and intrusion detection activity</p>
-              </div>
-            </div>
-
-            @if (analyticsLoading()) {
-              <div class="analytics-message">Loading security analytics...</div>
-            }
-
-            @if (analyticsError()) {
-              <div class="analytics-error">
-                {{ analyticsError() }}
-                <button type="button" (click)="loadAnalytics()">Retry</button>
-              </div>
-            }
-
-            @if (analytics(); as data) {
-              <div class="analytics-grid">
-                <div class="analytics-card total-card">
-                  <div class="card-icon">📊</div>
-                  <div class="card-content">
-                    <span>Total Predictions</span>
-                    <strong>{{ data.totalPredictions }}</strong>
-                    <small>Analyzed traffic records</small>
-                  </div>
-                </div>
-
-                <div class="analytics-card normal-card">
-                  <div class="card-icon">✓</div>
-                  <div class="card-content">
-                    <span>Normal Traffic</span>
-                    <strong>{{ data.normalPredictions }}</strong>
-                    <small>Predicted normal records</small>
-                  </div>
-                </div>
-
-                <div class="analytics-card attack-card">
-                  <div class="card-icon">⚠</div>
-                  <div class="card-content">
-                    <span>Attack Traffic</span>
-                    <strong>{{ data.attackPredictions }}</strong>
-                    <small>Predicted attack records</small>
-                  </div>
-                </div>
-
-                <div class="analytics-card incident-card">
-                  <div class="card-icon">🚨</div>
-                  <div class="card-content">
-                    <span>Active Incidents</span>
-                    <strong>{{ data.activeIncidents }}</strong>
-                    <small>Unresolved incidents</small>
-                  </div>
-                </div>
-              </div>
-
-              <div class="dashboard-charts-grid">
-                <div class="dashboard-panel trends-panel">
-                  <app-prediction-trends />
-                </div>
-
-                <div class="dashboard-panel risk-panel">
-                  <div class="panel-heading">
-                    <div>
-                      <h3>Risk Distribution</h3>
-                      <p>Prediction risk classification</p>
-                    </div>
-                  </div>
-
-                  <div class="risk-distribution-grid">
-                    <div class="risk-card low-risk">
-                      <span class="risk-label">Low Risk</span>
-                      <strong>{{ data.riskDistribution.low }}</strong>
-                    </div>
-                    <div class="risk-card medium-risk">
-                      <span class="risk-label">Medium Risk</span>
-                      <strong>{{ data.riskDistribution.medium }}</strong>
-                    </div>
-                    <div class="risk-card high-risk">
-                      <span class="risk-label">High Risk</span>
-                      <strong>{{ data.riskDistribution.high }}</strong>
-                    </div>
-                    <div class="risk-card critical-risk">
-                      <span class="risk-label">Critical Risk</span>
-                      <strong>{{ data.riskDistribution.critical }}</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            }
-          </section>
-        }
+  <app-multiclass-monitor mode="dashboard" />
+}
 
         @case ('alerts') {
-          <section class="dashboard-section"><app-prediction-history /></section>
-          <section class="dashboard-section"><app-incident-management /></section>
+
+          <section class="dashboard-section">@defer (on immediate) {
+  <app-incident-management />
+} @placeholder {
+  <p role="status">Preparing module...</p>
+} @loading {
+  <p role="status">Loading module...</p>
+} @error {
+  <p role="alert">Unable to load module. Please refresh the page.</p>
+}</section>
         }
 
         @case ('devices') {
@@ -205,17 +115,68 @@
         }
 
         @case ('traffic') {
-          <section class="dashboard-section"><app-detection /></section>
-          <section class="dashboard-section"><app-prediction-trends /></section>
-        }
+  <app-multiclass-monitor mode="traffic" />
+}
 
+        @case ('detection') {
+          <section class="dashboard-section">@defer (on immediate) {
+  <app-detection />
+} @placeholder {
+  <p role="status">Preparing module...</p>
+} @loading {
+  <p role="status">Loading module...</p>
+} @error {
+  <p role="alert">Unable to load module. Please refresh the page.</p>
+}</section>
+        }
+        @case ('response-center') {
+  @defer (on immediate) {
+  <app-response-center />
+} @placeholder {
+  <p role="status">Preparing module...</p>
+} @loading {
+  <p role="status">Loading module...</p>
+} @error {
+  <p role="alert">Unable to load module. Please refresh the page.</p>
+}
+}
+        @case ('assistant') {
+  @defer (on immediate) {
+  <app-security-assistant />
+} @placeholder {
+  <p role="status">Preparing module...</p>
+} @loading {
+  <p role="status">Loading module...</p>
+} @error {
+  <p role="alert">Unable to load module. Please refresh the page.</p>
+}
+}
+        @case ('not-found') {
+          <section class="route-message"><h2>404 - Page not found</h2><p>This address does not match an application page.</p><a routerLink="/dashboard">Return to dashboard</a></section>
+        }
         @case ('analysis') {
-          <section class="dashboard-section"><app-explainability /></section>
+          <section class="dashboard-section">@defer (on immediate) {
+  <app-explainability />
+} @placeholder {
+  <p role="status">Preparing module...</p>
+} @loading {
+  <p role="status">Loading module...</p>
+} @error {
+  <p role="alert">Unable to load module. Please refresh the page.</p>
+}</section>
         }
 
         @case ('reports') {
-          <section class="dashboard-section"><app-csv-upload /></section>
-        }
+  @defer (on immediate) {
+  <app-batch-reports />
+} @placeholder {
+  <p role="status">Preparing module...</p>
+} @loading {
+  <p role="status">Loading module...</p>
+} @error {
+  <p role="alert">Unable to load module. Please refresh the page.</p>
+}
+}
       }
     </div>
 
@@ -227,4 +188,3 @@
 </div>
 
 <!-- Floating assistant is independent of the selected dashboard page. -->
-<app-assistant-chat />

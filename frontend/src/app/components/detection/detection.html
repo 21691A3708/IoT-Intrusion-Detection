@@ -1,176 +1,435 @@
-<section class="detection-section">
-  <div class="section-header">
-    <div class="heading-content">
-      <div class="heading-icon">⌁</div>
-      <div>
-        <h2>Network Traffic Detection</h2>
-        <p>
-          Analyze IoT network traffic using the trained Random Forest intrusion detection model.
-        </p>
-      </div>
+<div class="detection-page">
+
+  <section class="detection-heading">
+
+    <div class="heading-icon">
+      <svg viewBox="0 0 24 24" width="28" height="28"
+           fill="none" stroke="currentColor"
+           stroke-width="1.7" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z"/>
+        <path d="M12 8v5m0 4h.01"/>
+      </svg>
     </div>
 
-    <div class="model-status">
-      <span class="status-dot"></span>
-      Random Forest Model
-    </div>
-  </div>
-
-  <div class="detection-info">
-    <div class="info-icon">ⓘ</div>
     <div>
-      <strong>Traffic Analysis</strong>
+      <h2>Multiclass Intrusion Detection</h2>
       <p>
-        Provide the 36 required traffic features in JSON format. The system will analyze the input
-        and calculate its attack probability and risk level.
+        Analyze network traffic using the calibrated
+        multiclass Random Forest model.
       </p>
     </div>
-  </div>
 
-  <div class="detection-card">
-    <div class="card-heading">
-      <div>
-        <h3>Traffic Feature Input</h3>
-        <p>Enter the network traffic data you want to analyze.</p>
-      </div>
-      <span class="input-format">JSON FORMAT</span>
+  </section>
+
+  @if (modelLoading()) {
+
+    <div class="panel loading-panel" role="status">
+      <span class="spinner"></span>
+      Loading model information...
     </div>
 
-    <form (ngSubmit)="detectTraffic()">
-      <div class="form-group">
-        <label for="trafficJson">
-          Traffic Features
-          <span class="required-label">Required</span>
-        </label>
-
-        <textarea
-          id="trafficJson"
-          name="trafficJson"
-          [(ngModel)]="trafficJson"
-          rows="18"
-          placeholder='{
-  "Header_Length": 0,
-  "Protocol Type": 0,
-  "Time_To_Live": 0,
-  "Rate": 0
-}'
-          spellcheck="false"
-          autocomplete="off"
-          required
-        ></textarea>
-
-        <div class="input-footer">
-          <span>Enter valid JSON containing all 36 model features.</span>
-          <span>Expected input: JSON object</span>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <div class="security-note">
-          <span class="security-icon">✓</span>
-          Analysis powered by your trained ML model
-        </div>
-
-        <button type="submit" [disabled]="submitting()">
-          @if (submitting()) {
-            <span class="button-spinner"></span>
-            Analyzing Traffic...
-          } @else {
-            <span class="button-icon">⌕</span>
-            Detect Intrusion
-          }
-        </button>
-      </div>
-    </form>
-  </div>
-
-  @if (errorMessage()) {
-    <div class="error-message">
-      <span class="message-icon">!</span>
-      <div>
-        <strong>Detection Failed</strong>
-        <p>{{ errorMessage() }}</p>
-      </div>
-    </div>
   }
 
-  @if (result(); as prediction) {
-    <div class="result-section">
-      <div class="result-heading">
-        <div>
-          <h3>Detection Results</h3>
-          <p>Machine learning analysis completed successfully.</p>
-        </div>
-        <span class="result-complete">✓ Analysis Complete</span>
+  @if (modelError()) {
+
+    <div class="error-panel" role="alert">
+      <p>{{ modelError() }}</p>
+
+      <button type="button" class="secondary-button"
+              (click)="loadModelInfo()">
+        Retry
+      </button>
+    </div>
+
+  }
+
+  @if (modelInfo(); as model) {
+
+    <section class="model-grid">
+
+      <div class="metric-card">
+        <span>Classification classes</span>
+        <strong>{{ model.class_count }}</strong>
       </div>
 
-      <div
-        class="result-card"
-        [class.attack-result]="prediction.predicted_label === 1"
-        [class.normal-result]="prediction.predicted_label === 0"
-      >
-        <div class="prediction-banner">
-          <div class="prediction-symbol">
-            {{ prediction.predicted_label === 1 ? '!' : '✓' }}
-          </div>
+      <div class="metric-card">
+        <span>Required features</span>
+        <strong>{{ model.feature_count }}</strong>
+      </div>
 
-          <div class="prediction-content">
-            <span>CLASSIFICATION RESULT</span>
-            <strong>{{ prediction.prediction | uppercase }}</strong>
-            <p>
-              {{
-                prediction.predicted_label === 1
-                  ? 'Potential malicious network traffic detected.'
-                  : 'Network traffic classified as normal.'
-              }}
-            </p>
-          </div>
+      <div class="metric-card">
+        <span>High-confidence threshold</span>
+        <strong>
+          {{ model.high_confidence_threshold * 100 | number:'1.0-1' }}%
+        </strong>
+      </div>
 
-          <span class="prediction-badge">
-            {{ prediction.prediction | uppercase }}
-          </span>
+      <div class="metric-card">
+        <span>Probability calibration</span>
+        <strong class="green">
+          {{ model.calibrated ? 'Enabled' : 'Disabled' }}
+        </strong>
+      </div>
+
+    </section>
+
+    <section class="panel model-panel">
+
+      <h3>Model Information</h3>
+
+      <div class="metadata-grid">
+
+        <div>
+          <span>Algorithm</span>
+          <strong>{{ model.algorithm }}</strong>
         </div>
+
+        <div>
+          <span>Model version</span>
+          <strong>{{ model.model_version }}</strong>
+        </div>
+
+        <div>
+          <span>Configuration</span>
+          <strong>{{ model.configuration }}</strong>
+        </div>
+
+        <div>
+          <span>Validation-supported classes</span>
+          <strong>
+            {{ model.validation_supported_labels.length }}
+            / {{ model.class_count }}
+          </strong>
+        </div>
+
+      </div>
+
+      <div class="family-list">
+        @for (family of families; track family) {
+          <span class="family-chip">{{ family }}</span>
+        }
+      </div>
+
+    </section>
+
+  }
+
+  <app-device-context-selector
+    [disabled]="submitting()">
+  </app-device-context-selector>
+
+  <div class="workspace">
+
+    <section class="panel input-panel">
+
+      <div class="panel-heading">
+        <h3>Network Traffic Input</h3>
+        <span class="mode-chip">Assessment only</span>
+      </div>
+
+      <p class="muted">
+        Enter a JSON object containing all 36 numerical
+        network traffic features.
+      </p>
+
+      <div class="button-row">
+
+        <button type="button" class="secondary-button"
+                (click)="loadTemplate()"
+                [disabled]="!modelInfo() || submitting()">
+          Load Feature Template
+        </button>
+
+        <button type="button" class="secondary-button"
+                (click)="clearInput()"
+                [disabled]="submitting()">
+          Clear
+        </button>
+
+      </div>
+
+      <label for="traffic-json">Traffic features (JSON)</label>
+
+
+<div style="margin: 12px 0;">
+
+  <label for="test-sample-select">
+    Load Test Sample
+  </label>
+
+  <select
+    id="test-sample-select"
+    #sampleSelect
+    (change)="loadTestSample(sampleSelect.value);
+              sampleSelect.value = ''"
+    [disabled]="submitting() || sampleLoading()"
+    style="width:100%; margin-top:8px; padding:12px;
+           background:#101b2c; color:#e2e8f0;
+           border:1px solid #35445b; border-radius:8px;">
+
+    <option value="">Select a test sample</option>
+    <option value="benign">Benign</option>
+    <option value="ddos">DDoS</option>
+    <option value="dos">DoS</option>
+    <option value="reconnaissance">Reconnaissance</option>
+    <option value="spoofing">Spoofing</option>
+    <option value="mirai">Mirai</option>
+    <option value="webbased">WebBased</option>
+
+  </select>
+
+  @if (sampleLoading()) {
+    <p role="status">Loading test sample...</p>
+  }
+
+</div>
+
+<textarea
+        id="traffic-json"
+        [ngModel]="trafficJson"
+        (ngModelChange)="onInputChange($event)"
+        [disabled]="submitting()"
+        placeholder="Paste network traffic features here..."
+        spellcheck="false"
+      ></textarea>
+
+      @if (errorMessage()) {
+        <div class="error-panel" role="alert">
+          {{ errorMessage() }}
+        </div>
+      }
+
+      <button
+        type="button"
+        class="primary-button"
+        (click)="detectTraffic()"
+        [disabled]="submitting() || !modelInfo() ||
+                    context.loading() || !trafficJson.trim()"
+      >
+
+        @if (submitting()) {
+          <span class="spinner"></span>
+          Analyzing Traffic...
+        } @else {
+          <svg viewBox="0 0 24 24" width="18" height="18"
+               fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round"
+               aria-hidden="true">
+            <circle cx="10" cy="10" r="6"/>
+            <path d="m15 15 6 6"/>
+          </svg>
+          Analyze Traffic
+        }
+
+      </button>
+
+
+      <button
+        type="button"
+        class="secondary-button"
+        style="width: 100%; margin-top: 12px;"
+        (click)="compareContexts()"
+        [disabled]="submitting() || !modelInfo() ||
+                    context.loading() || !trafficJson.trim()">
+
+        Compare All Device Contexts
+
+      </button>
+
+<p class="muted small">
+        This operation does not save a prediction,
+        create an incident or execute a response.
+      </p>
+
+    </section>
+
+    <section class="panel result-panel"
+             [attr.aria-busy]="submitting()">
+
+      <h3>Prediction Results</h3>
+
+      @if (submitting()) {
+
+        <div class="empty-state" role="status">
+          <span class="spinner large"></span>
+          <strong>Analyzing network traffic</strong>
+          <p>Waiting for classification and contextual risk assessment.</p>
+        </div>
+
+      } @else if (result(); as prediction) {
+
+        <div class="prediction-banner"
+             [class.benign]="prediction.predicted_family === 'Benign'">
+
+          <span>Predicted family</span>
+
+          <strong>{{ prediction.predicted_family }}</strong>
+
+          <span>
+            {{ statusLabels[prediction.detection_status] }}
+          </span>
+
+        </div>
+
+        @if (unsupportedClass()) {
+
+          <div class="warning-panel" role="status">
+            This class was not represented in the validation
+            split. Its predictive reliability has not been
+            established by that validation experiment.
+          </div>
+
+        }
 
         <div class="result-metrics">
-          <div class="metric-card">
-            <span class="metric-label">Attack Probability</span>
-            <strong> {{ (prediction.attack_probability * 100).toFixed(2) }}% </strong>
-
-            <div class="probability-track">
-              <div
-                class="probability-fill"
-                [style.width.%]="prediction.attack_probability * 100"
-              ></div>
-            </div>
-          </div>
 
           <div class="metric-card">
-            <span class="metric-label">Risk Level</span>
-            <strong
-              class="risk-value"
-              [class.low]="prediction.risk_level === 'low'"
-              [class.medium]="prediction.risk_level === 'medium'"
-              [class.high]="prediction.risk_level === 'high'"
-              [class.critical]="prediction.risk_level === 'critical'"
-            >
-              {{ prediction.risk_level | uppercase }}
+            <span>Model confidence</span>
+            <strong>
+              {{ prediction.prediction_confidence * 100 | number:'1.2-2' }}%
             </strong>
-            <span class="metric-description">Calculated risk classification</span>
           </div>
+
+          <div class="metric-card">
+            <span>Calibrated attack probability</span>
+            <strong>
+              {{ prediction.calibrated_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Raw attack probability</span>
+            <strong>
+              {{ prediction.raw_attack_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
+          <div class="metric-card">
+            <span>Benign class probability</span>
+            <strong>
+              {{ prediction.benign_probability * 100 | number:'1.2-2' }}%
+            </strong>
+          </div>
+
         </div>
 
-        <div class="result-details">
-          <div class="detail-item">
-            <span>Model Version</span>
+        <h4>Class Probability Distribution</h4>
+
+        <div class="probability-list">
+
+          @for (item of probabilityRows(); track item.family) {
+
+            <div class="probability-row">
+
+              <span class="probability-label">
+                {{ item.family }}
+              </span>
+
+              <div class="probability-track"
+                   role="meter"
+                   [attr.aria-label]="item.family + ' probability'"
+                   aria-valuemin="0"
+                   aria-valuemax="100"
+                   [attr.aria-valuenow]="item.probability * 100">
+
+                <div
+                  class="probability-fill"
+                  [class.predicted]="item.predicted"
+                  [class.normal]="item.family === 'Benign'"
+                  [style.width.%]="item.probability * 100">
+                </div>
+
+              </div>
+
+              <strong>
+                {{ item.probability * 100 | number:'1.2-2' }}%
+              </strong>
+
+            </div>
+
+          }
+
+        </div>
+
+        <div class="information-panel">
+
+          <strong>Probability interpretation</strong>
+
+          <p>
+            Individual family probabilities are uncalibrated.
+            Calibration applies only to the overall attack
+            versus benign probability.
+          </p>
+
+          @if (!prediction.calibration_independently_validated) {
+            <p>
+              Calibration has not yet been independently
+              evaluated on the held-out test set.
+            </p>
+          }
+
+        </div>
+
+        <div class="metadata-grid">
+
+          <div>
+            <span>Incident created</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Response executed</span>
+            <strong>No</strong>
+          </div>
+
+          <div>
+            <span>Context-aware risk</span>
+            <strong>{{ assessment()?.risk_assessment?.risk_level }}</strong>
+          </div>
+
+          <div>
+            <span>Model version</span>
             <strong>{{ prediction.model_version }}</strong>
           </div>
 
-          <div class="detail-item">
-            <span>Prediction ID</span>
-            <strong class="prediction-id">{{ prediction.id }}</strong>
-          </div>
         </div>
-      </div>
+
+      } @else {
+
+        <div class="empty-state">
+
+          <svg viewBox="0 0 24 24" width="52" height="52"
+               fill="none" stroke="currentColor"
+               stroke-width="1.3" stroke-linecap="round"
+               aria-hidden="true">
+            <path d="M3 3v18h18M7 16v-4m5 4V7m5 9v-6"/>
+          </svg>
+
+          <strong>No prediction available</strong>
+
+          <p>
+            Enter valid network traffic features and
+            select Analyze Traffic.
+          </p>
+
+        </div>
+
+      }
+
+    </section>
+
+  </div>
+
+  @if (assessment(); as riskResult) {
+    <div class="risk-results">
+      <app-risk-score [result]="riskResult" />
+      <app-risk-contributions [result]="riskResult" />
     </div>
   }
-</section>
+
+  @if (comparisonResult(); as comparison) {
+    <app-context-comparison [result]="comparison" />
+  }
+
+</div>

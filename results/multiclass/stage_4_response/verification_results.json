@@ -1,0 +1,92 @@
+[
+  {
+    "sample": "benign",
+    "predicted_family": "Benign",
+    "risk_score": 52.591230297825845,
+    "risk_level": "high",
+    "response_status": "not_required",
+    "incident_required": true,
+    "restriction_reasons": [
+      "attack_probability_sufficient",
+      "risk_score_sufficient",
+      "family_confidence_sufficient",
+      "attack_family_predicted",
+      "device_identity_verified",
+      "containment_action_available"
+    ]
+  },
+  {
+    "sample": "ddos",
+    "predicted_family": "DDoS",
+    "risk_score": 75.99835257965583,
+    "risk_level": "critical",
+    "response_status": "restricted",
+    "incident_required": true,
+    "restriction_reasons": [
+      "device_identity_verified"
+    ]
+  },
+  {
+    "sample": "dos",
+    "predicted_family": "DoS",
+    "risk_score": 69.99899720818173,
+    "risk_level": "high",
+    "response_status": "restricted",
+    "incident_required": true,
+    "restriction_reasons": [
+      "risk_score_sufficient",
+      "device_identity_verified"
+    ]
+  },
+  {
+    "sample": "reconnaissance",
+    "predicted_family": "Reconnaissance",
+    "risk_score": 55.99878611132536,
+    "risk_level": "high",
+    "response_status": "not_required",
+    "incident_required": true,
+    "restriction_reasons": [
+      "risk_score_sufficient",
+      "device_identity_verified",
+      "containment_action_available"
+    ]
+  },
+  {
+    "sample": "spoofing",
+    "predicted_family": "Benign",
+    "risk_score": 24.93876289603621,
+    "risk_level": "low",
+    "response_status": "not_required",
+    "incident_required": false,
+    "restriction_reasons": [
+      "attack_probability_sufficient",
+      "risk_score_sufficient",
+      "attack_family_predicted",
+      "device_identity_verified",
+      "containment_action_available"
+    ]
+  },
+  {
+    "sample": "mirai",
+    "predicted_family": "Mirai",
+    "risk_score": 77.99830922648887,
+    "risk_level": "critical",
+    "response_status": "restricted",
+    "incident_required": true,
+    "restriction_reasons": [
+      "device_identity_verified"
+    ]
+  },
+  {
+    "sample": "webbased",
+    "predicted_family": "WebBased",
+    "risk_score": 70.41435817301462,
+    "risk_level": "high",
+    "response_status": "restricted",
+    "incident_required": true,
+    "restriction_reasons": [
+      "risk_score_sufficient",
+      "device_identity_verified"
+    ]
+  }
+]

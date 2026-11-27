@@ -1,5 +1,11 @@
+import { SecurityAssistant } from '../security-assistant/security-assistant';
+import { BatchReports } from '../batch-reports/batch-reports';
+import { ResponseCenter } from '../response-center/response-center';
+import { MulticlassMonitor } from '../multiclass-monitor/multiclass-monitor';
 import { Component, OnInit, inject, signal, DestroyRef } from '@angular/core';
 
+import { ActivatedRoute, RouterLink, RouterLinkActive } from '@angular/router';
+import { Title } from '@angular/platform-browser';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { Api, Device, DashboardAnalytics } from '../../services/api';
@@ -10,35 +16,36 @@ import { BackendStatus } from '../backend-status/backend-status';
 import { Devices } from '../devices/devices';
 import { DeviceForm } from '../device-form/device-form';
 import { Detection } from '../detection/detection';
-import { PredictionHistory } from '../prediction-history/prediction-history';
+
 import { Explainability } from '../explainability/explainability';
 import { IncidentManagement } from '../incident-management/incident-management';
-import { CsvUpload } from '../csv-upload/csv-upload';
-import { PredictionTrends } from '../prediction-trends/prediction-trends';
-import { AssistantChat } from '../assistant-chat/assistant-chat';
 
-export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'analysis' | 'reports';
+
+
+
+export type DashboardView = 'dashboard' | 'alerts' | 'devices' | 'traffic' | 'analysis' | 'reports' | 'detection' | 'response-center' | 'assistant' | 'not-found';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [
+  imports: [SecurityAssistant, BatchReports, ResponseCenter, MulticlassMonitor,
+    RouterLink,
+    RouterLinkActive,
     BackendStatus,
     Devices,
     DeviceForm,
     Detection,
-    PredictionHistory,
     Explainability,
     IncidentManagement,
-    CsvUpload,
-    PredictionTrends,
-    AssistantChat,
-  ],
+    ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
 export class Dashboard implements OnInit {
   private readonly api = inject(Api);
+  private readonly route = inject(ActivatedRoute);
+  private readonly browserTitle = inject(Title);
+  protected readonly menuOpen = signal(false);
 
   private readonly predictionWebSocket = inject(PredictionWebSocket);
 
@@ -68,22 +75,25 @@ export class Dashboard implements OnInit {
   // --------------------------------------------------
 
   ngOnInit(): void {
+    this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
+      const views: Record<string, DashboardView> = {
+        dashboard: 'dashboard', incidents: 'alerts', devices: 'devices',
+        'traffic-monitor': 'traffic', explainability: 'analysis', reports: 'reports',
+        detection: 'detection', 'response-center': 'response-center', assistant: 'assistant',
+      };
+      const page = params.get('page') ?? '';
+      this.activeView.set(Object.prototype.hasOwnProperty.call(views, page) ? views[page] : 'not-found');
+      this.menuOpen.set(false);
+      this.browserTitle.setTitle(`${this.getPageTitle()} | IoT Sentinel`);
+    });
     this.loadDevices();
-    this.loadAnalytics();
-    this.connectPredictionWebSocket();
+
+
   }
 
   // --------------------------------------------------
   // SIDEBAR NAVIGATION
   // --------------------------------------------------
-
-  protected navigateTo(view: DashboardView): void {
-    this.activeView.set(view);
-  }
-
-  protected isActive(view: DashboardView): boolean {
-    return this.activeView() === view;
-  }
 
   protected getPageTitle(): string {
     const titles: Record<DashboardView, string> = {
@@ -93,6 +103,10 @@ export class Dashboard implements OnInit {
       traffic: 'Traffic Monitoring',
       analysis: 'Explainable AI Analysis',
       reports: 'Reports and Batch Analysis',
+      detection: 'Intrusion Detection',
+      'response-center': 'Response Center',
+      assistant: 'AI Assistant',
+      'not-found': 'Page Not Found',
     };
 
     return titles[this.activeView()];
@@ -194,6 +208,6 @@ export class Dashboard implements OnInit {
 
   protected refreshDashboard(): void {
     this.loadDevices();
-    this.loadAnalytics();
+
   }
 }

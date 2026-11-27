@@ -1,0 +1,141 @@
+﻿{
+    "prediction":  {
+                       "predicted_label":  7,
+                       "predicted_family":  "WebBased",
+                       "prediction":  "attack",
+                       "prediction_confidence":  0.7255547760872098,
+                       "candidate_attack_family":  "WebBased",
+                       "candidate_attack_probability":  0.7255547760872098,
+                       "benign_probability":  0.01008822750952131,
+                       "raw_attack_probability":  0.9899117724904787,
+                       "attack_probability":  0.9804694193037194,
+                       "calibrated_attack_probability":  0.9804694193037194,
+                       "class_probabilities":  {
+                                                   "Benign":  0.01008822750952131,
+                                                   "DDoS":  4.2283298097251583E-06,
+                                                   "DoS":  0.0,
+                                                   "Reconnaissance":  0.04982489281283839,
+                                                   "BruteForce":  0.20879309845668564,
+                                                   "Spoofing":  0.005722091814505654,
+                                                   "Mirai":  1.2684989429175475E-05,
+                                                   "WebBased":  0.7255547760872098
+                                               },
+                       "class_probabilities_calibrated":  false,
+                       "detection_status":  "high_confidence_attack",
+                       "high_confidence_alert":  true,
+                       "alert_threshold":  0.9,
+                       "model_version":  "multiclass_rf_v3_calibrated",
+                       "calibration_scope":  "binary_attack_probability",
+                       "calibration_independently_validated":  false
+                   },
+    "risk_assessment":  {
+                            "risk_policy_version":  "context_risk_v1",
+                            "risk_score":  70.41435817301462,
+                            "risk_level":  "high",
+                            "attack_probability":  0.9804694193037194,
+                            "device_context":  {
+                                                   "device_id":  "camera-001",
+                                                   "device_name":  "Security Camera",
+                                                   "device_type":  "camera",
+                                                   "criticality":  0.7,
+                                                   "exposure":  0.6,
+                                                   "business_function":  "Physical security monitoring",
+                                                   "containment_allowed":  true,
+                                                   "context_known":  true,
+                                                   "context_source":  "demonstration_inventory",
+                                                   "identity_verified":  false,
+                                                   "simulation_only":  true
+                                               },
+                            "attack_impact":  {
+                                                  "expected_impact":  0.7954246401437844,
+                                                  "raw_attack_probability":  0.9899117724904783,
+                                                  "impact_contributions":  [
+                                                                               {
+                                                                                   "attack_family":  "WebBased",
+                                                                                   "class_probability":  0.7255547760872098,
+                                                                                   "conditional_probability":  0.7329489316626837,
+                                                                                   "impact_score":  0.85,
+                                                                                   "weighted_contribution":  0.6230065919132811
+                                                                               },
+                                                                               {
+                                                                                   "attack_family":  "BruteForce",
+                                                                                   "class_probability":  0.20879309845668564,
+                                                                                   "conditional_probability":  0.21092091665037144,
+                                                                                   "impact_score":  0.7,
+                                                                                   "weighted_contribution":  0.14764464165526
+                                                                               },
+                                                                               {
+                                                                                   "attack_family":  "Reconnaissance",
+                                                                                   "class_probability":  0.04982489281283839,
+                                                                                   "conditional_probability":  0.050332660139484946,
+                                                                                   "impact_score":  0.4,
+                                                                                   "weighted_contribution":  0.02013306405579398
+                                                                               },
+                                                                               {
+                                                                                   "attack_family":  "Spoofing",
+                                                                                   "class_probability":  0.005722091814505654,
+                                                                                   "conditional_probability":  0.005780405863958642,
+                                                                                   "impact_score":  0.8,
+                                                                                   "weighted_contribution":  0.004624324691166914
+                                                                               },
+                                                                               {
+                                                                                   "attack_family":  "Mirai",
+                                                                                   "class_probability":  1.2684989429175475E-05,
+                                                                                   "conditional_probability":  1.281426262591244E-05,
+                                                                                   "impact_score":  0.95,
+                                                                                   "weighted_contribution":  1.2173549494616818E-05
+                                                                               },
+                                                                               {
+                                                                                   "attack_family":  "DDoS",
+                                                                                   "class_probability":  4.2283298097251583E-06,
+                                                                                   "conditional_probability":  4.2714208753041466E-06,
+                                                                                   "impact_score":  0.9,
+                                                                                   "weighted_contribution":  3.8442787877737324E-06
+                                                                               },
+                                                                               {
+                                                                                   "attack_family":  "DoS",
+                                                                                   "class_probability":  0.0,
+                                                                                   "conditional_probability":  0.0,
+                                                                                   "impact_score":  0.75,
+                                                                                   "weighted_contribution":  0.0
+                                                                               }
+                                                                           ],
+                                                  "impact_available":  true,
+                                                  "impact_policy_version":  "attack_impact_v1",
+                                                  "class_probabilities_calibrated":  false
+                                              },
+                            "risk_factors":  {
+                                                 "criticality":  0.7,
+                                                 "attack_impact":  0.7954246401437844,
+                                                 "exposure":  0.6
+                                             },
+                            "risk_weights":  {
+                                                 "criticality":  0.4,
+                                                 "attack_impact":  0.4,
+                                                 "exposure":  0.2
+                                             },
+                            "risk_contributions":  {
+                                                       "criticality":  27.453143740504142,
+                                                       "attack_impact":  31.195581400865855,
+                                                       "exposure":  11.765633031644633
+                                                   },
+                            "risk_reconstruction":  {
+                                                        "contribution_sum":  70.41435817301462,
+                                                        "error":  0.0,
+                                                        "passed":  true
+                                                    },
+                            "recommended_action":  "alert_and_investigate",
+                            "requires_device_verification":  true,
+                            "containment_authorized":  false,
+                            "response_executed":  false,
+                            "warnings":  [
+                                             "Risk weights and thresholds are provisional policy parameters.",
+                                             "Device context is demonstration-only.",
+                                             "Attack probability calibration has not been independently evaluated."
+                                         ]
+                        },
+    "mode":  "risk_assessment_only",
+    "incident_created":  false,
+    "response_executed":  false,
+    "source":  "risk_frontend_verification"
+}

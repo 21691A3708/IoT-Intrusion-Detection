@@ -1,0 +1,219 @@
+{
+    "tables": [
+        "incident_audit_logs",
+        "incidents",
+        "predictions",
+        "response_audit_logs",
+        "response_records",
+        "risk_assessments"
+    ],
+    "permissions": {
+        "schema_usage": true,
+        "can_select": true,
+        "can_insert": true,
+        "can_update_incidents": true,
+        "rls_active": false
+    },
+    "constraints": [
+        {
+            "constraint_name": "incident_audit_logs_actor_user_id_fkey",
+            "definition": "FOREIGN KEY (actor_user_id) REFERENCES auth.users(id) ON DELETE RESTRICT"
+        },
+        {
+            "constraint_name": "incident_audit_logs_incident_id_fkey",
+            "definition": "FOREIGN KEY (incident_id) REFERENCES multiclass.incidents(id) ON DELETE RESTRICT"
+        },
+        {
+            "constraint_name": "incident_audit_logs_pkey",
+            "definition": "PRIMARY KEY (id)"
+        },
+        {
+            "constraint_name": "mc_incident_audit_action_check",
+            "definition": "CHECK ((action = ANY (ARRAY['incident_registered'::text, 'status_changed'::text])))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_actor_check",
+            "definition": "CHECK (((char_length(btrim(actor_name)) >= 1) AND (char_length(btrim(actor_name)) <= 100)))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_auth_check",
+            "definition": "CHECK (((actor_authenticated = false) AND (actor_user_id IS NULL)))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_details_check",
+            "definition": "CHECK ((jsonb_typeof(details) = 'object'::text))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_new_status_check",
+            "definition": "CHECK ((new_status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'investigating'::text, 'resolved'::text, 'false_positive'::text])))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_previous_status_check",
+            "definition": "CHECK (((previous_status IS NULL) OR (previous_status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'investigating'::text, 'resolved'::text, 'false_positive'::text]))))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_reason_check",
+            "definition": "CHECK (((char_length(btrim(reason)) >= 1) AND (char_length(btrim(reason)) <= 1000)))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_sequence_check",
+            "definition": "CHECK ((event_sequence > 0))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_sequence_unique",
+            "definition": "UNIQUE (incident_id, event_sequence)"
+        },
+        {
+            "constraint_name": "mc_incident_audit_simulation_check",
+            "definition": "CHECK ((simulation_only = true))"
+        },
+        {
+            "constraint_name": "mc_incident_audit_transition_check",
+            "definition": "CHECK ((((action = 'incident_registered'::text) AND (previous_status IS NULL) AND (event_sequence = 1)) OR ((action = 'status_changed'::text) AND (previous_status IS NOT NULL) AND (event_sequence > 1) AND (((previous_status = 'open'::text) AND (new_status = 'acknowledged'::text)) OR ((previous_status = 'acknowledged'::text) AND (new_status = 'investigating'::text)) OR ((previous_status = 'investigating'::text) AND (new_status = ANY (ARRAY['resolved'::text, 'false_positive'::text])))))))"
+        }
+    ],
+    "triggers": [
+        {
+            "trigger_name": "trg_mc_incident_audit_immutable",
+            "enabled": "O",
+            "definition": "CREATE TRIGGER trg_mc_incident_audit_immutable BEFORE DELETE OR UPDATE ON multiclass.incident_audit_logs FOR EACH ROW EXECUTE FUNCTION multiclass.prevent_incident_audit_mutation()"
+        },
+        {
+            "trigger_name": "trg_mc_incident_audit_no_truncate",
+            "enabled": "O",
+            "definition": "CREATE TRIGGER trg_mc_incident_audit_no_truncate BEFORE TRUNCATE ON multiclass.incident_audit_logs FOR EACH STATEMENT EXECUTE FUNCTION multiclass.prevent_incident_audit_mutation()"
+        }
+    ],
+    "security": {
+        "rls_enabled": true,
+        "rls_forced": false
+    },
+    "frontend_permissions": {
+        "anon_schema_usage": false,
+        "authenticated_schema_usage": false,
+        "anon_select": false,
+        "authenticated_select": false,
+        "anon_insert": false,
+        "authenticated_insert": false
+    },
+    "audit_records": [
+        {
+            "incident_id": "27f97f27-eb0a-4afb-bd65-17d665976445",
+            "event_sequence": 1,
+            "actor_name": "system",
+            "actor_authenticated": false,
+            "action": "incident_registered",
+            "previous_status": null,
+            "new_status": "open",
+            "reason": "Existing incident registered during audit migration.",
+            "simulation_only": true,
+            "details": {
+                "severity": "critical",
+                "migration_backfill": true,
+                "original_created_at": "2026-11-25T14:03:56.161592+00:00"
+            },
+            "incident_status": "open",
+            "severity": "critical"
+        },
+        {
+            "incident_id": "31212ad7-b48f-4706-ad3c-dbb813a21652",
+            "event_sequence": 1,
+            "actor_name": "system",
+            "actor_authenticated": false,
+            "action": "incident_registered",
+            "previous_status": null,
+            "new_status": "open",
+            "reason": "Existing incident registered during audit migration.",
+            "simulation_only": true,
+            "details": {
+                "severity": "critical",
+                "migration_backfill": true,
+                "original_created_at": "2026-11-25T14:03:57.686741+00:00"
+            },
+            "incident_status": "open",
+            "severity": "critical"
+        },
+        {
+            "incident_id": "5d5531ef-c420-4832-b5c7-5fae6ba3adc8",
+            "event_sequence": 1,
+            "actor_name": "system",
+            "actor_authenticated": false,
+            "action": "incident_registered",
+            "previous_status": null,
+            "new_status": "open",
+            "reason": "Existing incident registered during audit migration.",
+            "simulation_only": true,
+            "details": {
+                "severity": "critical",
+                "migration_backfill": true,
+                "original_created_at": "2026-11-25T14:03:59.066598+00:00"
+            },
+            "incident_status": "open",
+            "severity": "critical"
+        },
+        {
+            "incident_id": "73d5d26d-8fb1-428c-9fcc-da725ad5e7cd",
+            "event_sequence": 1,
+            "actor_name": "system",
+            "actor_authenticated": false,
+            "action": "incident_registered",
+            "previous_status": null,
+            "new_status": "open",
+            "reason": "Existing incident registered during audit migration.",
+            "simulation_only": true,
+            "details": {
+                "severity": "high",
+                "migration_backfill": true,
+                "original_created_at": "2026-11-25T14:04:00.841665+00:00"
+            },
+            "incident_status": "open",
+            "severity": "high"
+        },
+        {
+            "incident_id": "ed430a9a-150b-40d1-80b6-874e4ca23fbf",
+            "event_sequence": 1,
+            "actor_name": "system",
+            "actor_authenticated": false,
+            "action": "incident_registered",
+            "previous_status": null,
+            "new_status": "open",
+            "reason": "Existing incident registered during audit migration.",
+            "simulation_only": true,
+            "details": {
+                "severity": "critical",
+                "migration_backfill": true,
+                "original_created_at": "2026-11-25T14:03:54.276692+00:00"
+            },
+            "incident_status": "open",
+            "severity": "critical"
+        },
+        {
+            "incident_id": "f673af4b-281f-469f-9377-9bb3f68330e0",
+            "event_sequence": 1,
+            "actor_name": "system",
+            "actor_authenticated": false,
+            "action": "incident_registered",
+            "previous_status": null,
+            "new_status": "open",
+            "reason": "Existing incident registered during audit migration.",
+            "simulation_only": true,
+            "details": {
+                "severity": "high",
+                "migration_backfill": true,
+                "original_created_at": "2026-11-25T14:03:52.901746+00:00"
+            },
+            "incident_status": "open",
+            "severity": "high"
+        }
+    ],
+    "record_counts": {
+        "predictions": 7,
+        "risk_assessments": 7,
+        "incidents": 6,
+        "response_records": 7,
+        "response_audit_logs": 7,
+        "incident_audit_logs": 6
+    },
+    "unsafe_responses": 0,
+    "verification_status": "PASSED"
+}

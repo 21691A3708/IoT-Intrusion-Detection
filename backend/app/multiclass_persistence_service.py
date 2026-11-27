@@ -1,7 +1,7 @@
 ﻿from uuid import UUID
 
 from .database import engine
-
+from .incident_repository import register_incident_audit
 from .response_lifecycle_service import (
     ResponseLifecycleService,
 )
@@ -139,6 +139,11 @@ def persist_initial_record(
         risk=risk,
         response_plan=plan,
     )
+    if incident_id is not None:
+        register_incident_audit(
+            connection=connection,
+            incident_id=incident_id,
+        )
 
     # Step 4: Save response record
 

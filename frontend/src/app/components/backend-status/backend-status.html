@@ -1,28 +1,57 @@
-<div class="status-card">
+﻿<div class="status-card">
+
   <div class="backend-indicator">
+
     <span
       class="status-dot"
       [class.connected]="apiStatus() === 'Connected'"
       [class.disconnected]="apiStatus() === 'Disconnected'"
       [class.checking]="apiStatus() === 'Checking connection...'"
+      aria-hidden="true"
     ></span>
 
-    <div class="backend-info">
+    <div class="backend-info" aria-live="polite">
       <span class="backend-label">Backend</span>
       <strong>{{ apiStatus() }}</strong>
     </div>
+
   </div>
 
-  <div class="backend-meta" *ngIf="health()">
-    <span>{{ health()?.service }}</span>
-  </div>
+  @if (health(); as info) {
+    <div class="backend-meta">
+      <span>{{ info.service }}</span>
+    </div>
+  }
 
   <button
     type="button"
     class="check-button"
+    title="Check backend connection"
+    aria-label="Check backend connection"
     (click)="checkHealth()"
     [disabled]="apiStatus() === 'Checking connection...'"
   >
-    ↻ Check
+
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      style="vertical-align: middle;"
+    >
+      <path d="M20 7v5h-5"/>
+      <path d="M4 17v-5h5"/>
+      <path d="M6.1 7a7 7 0 0 1 11.8-1L20 12"/>
+      <path d="M4 12l2.1 6a7 7 0 0 0 11.8-1"/>
+    </svg>
+
+    Check
+
   </button>
+
 </div>

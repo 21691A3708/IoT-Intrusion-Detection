@@ -43,7 +43,7 @@
     <div class="chart-header">
       <div>
         <h3>Traffic Classification Trends</h3>
-        <p>Daily normal and attack prediction counts</p>
+        <p>Daily counts within the latest 200 retrieved predictions</p>
       </div>
 
       <div class="chart-legend">
@@ -83,7 +83,7 @@
           [class.active]="selectedRange() === 'all'"
           (click)="changeRange('all')"
         >
-          All Available
+          Latest 200
         </button>
       </div>
     </div>
@@ -105,7 +105,7 @@
       <div class="chart-state">
         <div class="state-icon">⌁</div>
         <h3>No Prediction Data</h3>
-        <p>No prediction records were found for the selected time period.</p>
+        <p>No retrieved records match this time period. Try Latest 200 or refresh.</p>
       </div>
     } @else {
       <div class="chart-container">

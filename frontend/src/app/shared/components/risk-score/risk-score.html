@@ -1,0 +1,292 @@
+﻿<section
+  class="risk-panel"
+  [attr.data-level]="level()"
+  aria-labelledby="risk-score-heading"
+>
+
+  <!-- Component header -->
+
+  <header class="panel-header">
+
+    <div class="header-icon" aria-hidden="true">
+
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/>
+        <path d="M12 8v4"/>
+        <path d="M12 16h.01"/>
+      </svg>
+
+    </div>
+
+    <div class="header-copy">
+
+      <h2 id="risk-score-heading">
+        Context-Aware Risk Assessment
+      </h2>
+
+      <p>
+        Risk policy: {{ assessment().risk_policy_version }}
+      </p>
+
+    </div>
+
+    <span class="mode-label">
+      Assessment only
+    </span>
+
+  </header>
+
+
+  <!-- Main risk gauge -->
+
+  <div class="risk-overview">
+
+    <div class="overview-copy">
+
+      <span class="eyebrow">
+        Overall risk score
+      </span>
+
+      <div class="score-value">
+
+        {{ score() | number:'1.2-2' }}
+
+        <span>/ 100</span>
+
+      </div>
+
+      <span class="severity-label">
+
+        <span class="severity-dot"></span>
+
+        {{ levelLabel() }} Risk
+
+      </span>
+
+      <div class="context-details">
+
+        <div>
+          <span>Predicted family</span>
+          <strong>
+            {{ prediction().predicted_family }}
+          </strong>
+        </div>
+
+        <div>
+          <span>Device context</span>
+          <strong>
+            {{ context().device_name }}
+          </strong>
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div class="gauge-container">
+
+      <svg
+        class="risk-gauge"
+        viewBox="0 0 140 140"
+        role="img"
+        [attr.aria-label]="
+          levelLabel() + ' risk, ' +
+          (score() | number:'1.2-2') +
+          ' out of 100'
+        "
+      >
+
+        <circle
+          class="gauge-track"
+          cx="70"
+          cy="70"
+          r="54"
+        />
+
+        <circle
+          class="gauge-progress"
+          cx="70"
+          cy="70"
+          r="54"
+          [attr.stroke-dasharray]="circumference"
+          [attr.stroke-dashoffset]="gaugeOffset()"
+          transform="rotate(-90 70 70)"
+        />
+
+        <text
+          class="gauge-number"
+          x="70"
+          y="70"
+          text-anchor="middle"
+        >
+          {{ score() | number:'1.1-1' }}
+        </text>
+
+        <text
+          class="gauge-label"
+          x="70"
+          y="89"
+          text-anchor="middle"
+        >
+          {{ levelLabel() }}
+        </text>
+
+      </svg>
+
+    </div>
+
+  </div>
+
+
+  <!-- Risk factor metrics -->
+
+  <div class="metrics-grid">
+
+    @for (metric of metrics(); track metric.label) {
+
+      <article class="metric-card">
+
+        <span class="metric-label">
+          {{ metric.label }}
+        </span>
+
+        <strong class="metric-value">
+          {{ metric.value | number:metric.precision }}%
+        </strong>
+
+        <div class="metric-track" aria-hidden="true">
+
+          <div
+            class="metric-fill"
+            [style.width.%]="metric.value"
+          ></div>
+
+        </div>
+
+        <p>{{ metric.description }}</p>
+
+      </article>
+
+    }
+
+  </div>
+
+
+  <!-- Severity reference -->
+
+  <div class="severity-scale">
+
+    <h3>Risk severity scale</h3>
+
+    <div class="scale-grid">
+
+      <div class="scale-item low">
+        <span class="scale-bar"></span>
+        <strong>Low</strong>
+        <small>0 to &lt;25</small>
+      </div>
+
+      <div class="scale-item medium">
+        <span class="scale-bar"></span>
+        <strong>Medium</strong>
+        <small>25 to &lt;50</small>
+      </div>
+
+      <div class="scale-item high">
+        <span class="scale-bar"></span>
+        <strong>High</strong>
+        <small>50 to &lt;75</small>
+      </div>
+
+      <div class="scale-item critical">
+        <span class="scale-bar"></span>
+        <strong>Critical</strong>
+        <small>75 to 100</small>
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- Classification and risk distinction -->
+
+  @if (classificationMismatch()) {
+
+    <div class="warning-panel" role="status">
+
+      <strong>
+        Classification and risk differ
+      </strong>
+
+      <p>
+        Benign is the most probable individual class,
+        but the calibrated probability of malicious
+        traffic is at least 50%. Review the complete
+        probability distribution and risk assessment.
+      </p>
+
+    </div>
+
+  }
+
+
+  <!-- Unknown-device fallback -->
+
+  @if (!context().context_known) {
+
+    <div class="warning-panel">
+
+      <strong>Unknown device context</strong>
+
+      <p>
+        The assessment uses fallback device
+        criticality and exposure values.
+        Device identity remains unverified.
+      </p>
+
+    </div>
+
+  }
+
+
+  <!-- Safety information -->
+
+  <footer class="safety-footer">
+
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11z"/>
+      <path d="m9 12 2 2 4-4"/>
+    </svg>
+
+    <div>
+
+      <strong>Assessment-only operation</strong>
+
+      <p>
+        Device identity is unverified.
+        Containment is not authorized.
+        No incident or response action was executed.
+      </p>
+
+    </div>
+
+  </footer>
+
+</section>

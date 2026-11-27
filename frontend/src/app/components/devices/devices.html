@@ -1,118 +1,323 @@
-<section class="devices-section">
-  <div class="section-header">
-    <div class="heading-content">
-      <div class="heading-icon">⌘</div>
-      <div>
-        <h2>Device Management</h2>
-        <p>Monitor and manage registered IoT devices across your network.</p>
-      </div>
-    </div>
+﻿<section class="devices-section">
 
-    <div class="device-count">
-      <span class="count-indicator"></span>
-      {{ devices().length }} Registered Devices
+  <header class="section-header">
+    <div>
+      <h2>Device Inventory</h2>
+      <p>Registered IoT devices and security context profiles.</p>
     </div>
-  </div>
+  </header>
 
-  <div class="overview-card">
-    <div class="overview-icon">▣</div>
-    <div class="overview-content">
-      <span class="overview-label">Total Registered Devices</span>
+  <div class="summary-grid">
+
+    <article class="summary-card">
+      <span>Registered Devices</span>
       <strong>{{ devices().length }}</strong>
-      <p>Devices currently registered in the IoT monitoring system</p>
-    </div>
+      <small>Database inventory</small>
+    </article>
+
+    <article class="summary-card">
+      <span>Reported Online</span>
+      <strong class="green">{{ onlineCount() }}</strong>
+      <small>Stored status, not live verification</small>
+    </article>
+
+    <article class="summary-card">
+      <span>Security Context Profiles</span>
+      <strong>{{ context.totalProfiles() }}</strong>
+      <small>Demonstration inventory</small>
+    </article>
+
   </div>
 
-  <div class="devices-list-section">
-    <div class="list-heading">
+  <section class="panel">
+
+    <div class="section-header">
       <div>
         <h3>Registered Devices</h3>
-        <p>Device inventory and registration information</p>
+        <p>Search and filter your device inventory.</p>
       </div>
-      <span class="record-count">{{ devices().length }} Records</span>
+      <span class="chip">
+        {{ filteredDevices().length }} / {{ devices().length }}
+      </span>
+    </div>
+
+    <div class="filter-bar">
+
+      <input
+        type="search"
+        aria-label="Search devices"
+        placeholder="Search name, identifier, type or location..."
+        [ngModel]="search()"
+        (ngModelChange)="search.set($event)"
+      />
+
+      <select
+        aria-label="Filter by device status"
+        [ngModel]="statusFilter()"
+        (ngModelChange)="statusFilter.set($event)"
+      >
+        <option value="all">All statuses</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+        <option value="unknown">Unknown</option>
+        <option value="quarantined">Quarantined</option>
+      </select>
+
+      <button type="button" (click)="resetFilters()">
+        Reset
+      </button>
+
     </div>
 
     @if (loading()) {
-      <div class="message loading-message">
-        <span class="loading-indicator"></span>
+
+      <div class="message" role="status">
         Loading registered devices...
       </div>
+
     } @else if (error()) {
-      <div class="message error-message">
-        <span>!</span>
+
+      <div class="message error" role="alert">
         {{ error() }}
       </div>
-    } @else if (devices().length === 0) {
-      <div class="empty-state">
-        <div class="empty-icon">▣</div>
-        <h3>No devices registered</h3>
-        <p>Register an IoT device to start monitoring it in your network.</p>
+
+    } @else if (!filteredDevices().length) {
+
+      <div class="message">
+        No devices match your search.
       </div>
+
     } @else {
-      <div class="table-container">
+
+      <div class="table-wrapper">
+
         <table>
+
           <thead>
             <tr>
-              <th>DEVICE</th>
-              <th>IDENTIFIER</th>
-              <th>DEVICE TYPE</th>
-              <th>LOCATION</th>
-              <th>STATUS</th>
-              <th>REGISTERED ON</th>
+              <th>Device</th>
+              <th>Identifier</th>
+              <th>Type</th>
+              <th>Location</th>
+              <th>Reported Status</th>
+              <th>Registered On</th>
             </tr>
           </thead>
 
           <tbody>
-            @for (device of devices(); track device.id) {
+
+            @for (device of filteredDevices(); track device.id) {
+
               <tr>
+
                 <td>
-                  <div class="device-name-cell">
-                    <div class="device-avatar">▣</div>
-                    <div class="device-name-content">
-                      <strong>{{ device.device_name }}</strong>
-                      <span>IoT Endpoint</span>
-                    </div>
+                  <div class="device-name">
+                    <svg viewBox="0 0 24 24" width="20" height="20"
+                         fill="none" stroke="currentColor"
+                         stroke-width="1.6" aria-hidden="true">
+                      <rect x="3" y="3" width="18" height="14" rx="2"/>
+                      <path d="M8 21h8m-4-4v4"/>
+                    </svg>
+                    <strong>{{ device.device_name }}</strong>
                   </div>
                 </td>
 
-                <td>
-                  <span class="identifier">
-                    {{ device.device_identifier }}
-                  </span>
+                <td class="identifier">
+                  {{ device.device_identifier }}
                 </td>
 
-                <td>
-                  <span class="device-type">
-                    {{ device.device_type }}
-                  </span>
-                </td>
+                <td>{{ device.device_type }}</td>
+
+                <td>{{ device.location || 'Not specified' }}</td>
 
                 <td>
-                  <span class="location">
-                    {{ device.location || 'Not specified' }}
-                  </span>
-                </td>
-
-                <td>
-                  <span
-                    class="status-badge"
-                    [class]="'status-badge ' + device.status.toLowerCase()"
-                  >
-                    <span class="status-dot"></span>
+                  <span class="status-chip"
+                        [class.online]="device.status === 'online'"
+                        [class.offline]="device.status === 'offline'"
+                        [class.quarantined]="device.status === 'quarantined'">
                     {{ device.status }}
                   </span>
                 </td>
 
                 <td>
-                  <span class="registered-date">
-                    {{ device.created_at | date: 'medium' }}
-                  </span>
+                  {{ device.created_at | date:'medium' }}
                 </td>
+
               </tr>
+
             }
+
           </tbody>
+
         </table>
+
       </div>
+
     }
-  </div>
+
+  </section>
+
+  <section class="panel">
+
+    <div class="section-header">
+
+      <div>
+        <h3>Device Security Context Profiles</h3>
+        <p>Predefined profiles for context-aware risk assessment.</p>
+      </div>
+
+      <button type="button"
+              (click)="context.loadProfiles(true)"
+              [disabled]="context.loading()">
+        Refresh Profiles
+      </button>
+
+    </div>
+
+    <div class="notice">
+      These profiles are demonstration configurations,
+      separate from the registered device inventory.
+      No physical device identity has been verified.
+    </div>
+
+    @if (context.loading()) {
+
+      <div class="message" role="status">
+        Loading security profiles...
+      </div>
+
+    } @else if (context.error()) {
+
+      <div class="message error" role="alert">
+        {{ context.error() }}
+      </div>
+
+    } @else {
+
+      <div class="profile-grid">
+
+        @for (profile of context.profiles(); track profile.device_id) {
+
+          <article class="profile-card"
+                   [class.selected]="context.selectedDeviceId() === profile.device_id">
+
+            <div class="profile-heading">
+
+              <div class="profile-icon">
+                <svg viewBox="0 0 24 24" width="24" height="24"
+                     fill="none" stroke="currentColor"
+                     stroke-width="1.6" aria-hidden="true">
+                  <path d="M12 3l9 4v5c0 5-4 8-9 10-5-2-9-5-9-10V7z"/>
+                  <path d="M9 12l2 2 4-4"/>
+                </svg>
+              </div>
+
+              <div>
+                <h4>{{ profile.device_name }}</h4>
+                <small>{{ profile.device_id }}</small>
+              </div>
+
+            </div>
+
+            <p>{{ profile.business_function }}</p>
+
+            <div class="metric-heading">
+              <span>Device Criticality</span>
+              <strong>
+                {{ profile.criticality * 100 | number:'1.0-1' }}%
+              </strong>
+            </div>
+
+            <div class="meter"
+                 role="meter"
+                 aria-label="Device criticality"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 [attr.aria-valuenow]="profile.criticality * 100">
+
+              <div class="criticality-fill"
+                   [class.high]="profile.criticality >= 0.9"
+                   [style.width.%]="profile.criticality * 100">
+              </div>
+
+            </div>
+
+            <div class="metric-heading">
+              <span>Network Exposure</span>
+              <strong>
+                {{ profile.exposure * 100 | number:'1.0-1' }}%
+              </strong>
+            </div>
+
+            <div class="meter"
+                 role="meter"
+                 aria-label="Network exposure"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 [attr.aria-valuenow]="profile.exposure * 100">
+
+              <div class="exposure-fill"
+                   [style.width.%]="profile.exposure * 100">
+              </div>
+
+            </div>
+
+            <div class="policy">
+
+              <span class="chip">
+                Identity unverified
+              </span>
+
+              <span class="chip"
+                    [class.restricted]="!profile.containment_allowed">
+                {{ profile.containment_allowed
+                    ? 'Consideration permitted'
+                    : 'Containment restricted' }}
+              </span>
+
+            </div>
+
+            <small>
+              Simulation only. Containment not authorized.
+            </small>
+
+            <button type="button"
+                    class="select-button"
+                    [attr.aria-pressed]="context.selectedDeviceId() === profile.device_id"
+                    (click)="context.selectDevice(profile.device_id)">
+
+              {{ context.selectedDeviceId() === profile.device_id
+                  ? 'Selected Context'
+                  : 'Select Context' }}
+
+            </button>
+
+          </article>
+
+        }
+
+      </div>
+
+      @if (context.selectedProfile(); as selected) {
+
+        <div class="selection-summary" role="status">
+
+          <div>
+            <strong>Selected context: {{ selected.device_name }}</strong>
+            <p>{{ selected.device_id }} - Ready for risk assessment integration.</p>
+          </div>
+
+          <button type="button"
+                  (click)="context.clearSelection()">
+            Clear Selection
+          </button>
+
+        </div>
+
+      }
+
+    }
+
+  </section>
+
 </section>

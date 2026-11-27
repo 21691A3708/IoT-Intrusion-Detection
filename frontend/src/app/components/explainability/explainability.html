@@ -1,202 +1,339 @@
-<section class="explainability-section">
-  <div class="section-header">
-    <div class="heading-content">
-      <div class="heading-icon">✦</div>
-      <div>
-        <h2>Explainable AI Analysis</h2>
-        <p>Understand the features influencing intrusion detection using SHAP explainability.</p>
-      </div>
+﻿<section class="explainability-page">
+
+  <header class="page-header">
+
+    <div class="heading-icon">
+      <svg viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="1.6">
+        <path d="M4 19V5M4 19h16"/>
+        <path d="M8 15v-4M12 15V7M16 15V9M20 15V4"/>
+      </svg>
     </div>
 
-    <span class="model-badge">SHAP · Random Forest</span>
-  </div>
-
-  <div class="info-banner">
-    <span class="info-icon">ⓘ</span>
     <div>
-      <strong>Understanding SHAP Explanations</strong>
-      <p>
-        SHAP measures how individual network traffic features contribute to the model's output for
-        the attack class. Positive values push the output toward attack, while negative values push
-        it toward normal.
-      </p>
+      <h2>Multiclass Explainable AI</h2>
+      <p>Understand network traffic predictions using TreeSHAP.</p>
     </div>
+
+  </header>
+
+  <div class="metrics-grid">
+
+    <article class="metric">
+      <small>Explanation engine</small>
+      <strong>TreeSHAP</strong>
+    </article>
+
+    <article class="metric">
+      <small>Supported classes</small>
+      <strong>{{ model()?.class_count ?? '—' }}</strong>
+    </article>
+
+    <article class="metric">
+      <small>Network features</small>
+      <strong>{{ model()?.feature_count ?? '—' }}</strong>
+    </article>
+
+    <article class="metric">
+      <small>Analysis mode</small>
+      <strong class="green">Read only</strong>
+    </article>
+
   </div>
 
-  <div class="input-section">
-    <div class="card-header">
-      <div>
-        <h3>Network Traffic Input</h3>
-        <p>Provide all 36 required network traffic features.</p>
-      </div>
-      <span class="format-badge">JSON INPUT</span>
-    </div>
-
-    <div class="input-body">
-      <label for="trafficJson">Traffic Features (JSON)</label>
-
-      <textarea
-        id="trafficJson"
-        name="trafficJson"
-        [(ngModel)]="trafficJson"
-        rows="15"
-        spellcheck="false"
-        placeholder="Paste your 36 traffic features JSON here..."
-      ></textarea>
-
-      <div class="input-note">
-        <span>Input must contain the model's 36 expected features.</span>
-        <span>Format: JSON Object</span>
-      </div>
-
-      <div class="input-actions">
-        <span class="analysis-note"> ✦ Feature-level model explanation </span>
-
-        <button
-          type="button"
-          (click)="explainTraffic()"
-          [disabled]="submitting() || !trafficJson.trim()"
-        >
-          @if (submitting()) {
-            <span class="spinner"></span>
-            Generating Explanation...
-          } @else {
-            ✦ Generate SHAP Explanation
-          }
-        </button>
-      </div>
-    </div>
-  </div>
-
-  @if (errorMessage()) {
-    <div class="error-message" role="alert">
-      <span>!</span>
-      {{ errorMessage() }}
+  @if (initializationError()) {
+    <div class="error" role="alert">
+      {{ initializationError() }}
+      <button type="button" (click)="initialize()">
+        Retry
+      </button>
     </div>
   }
+
+  <div class="notice">
+    SHAP explains the original model probabilities.
+    The calibrated attack probability is displayed separately.
+    No incident creation or network containment is requested.
+  </div>
+
+  <section class="panel">
+
+    <h3>Network Traffic Input</h3>
+
+    <div class="settings-grid">
+
+      <label>
+        Load Test Sample
+
+        <select [(ngModel)]="selectedSample"
+                (ngModelChange)="loadSample($event)"
+                [disabled]="loading()">
+
+          <option value="">Select a sample</option>
+
+          @for (sample of samples(); track sample.id) {
+            <option [value]="sample.id">
+              {{ sample.family }}
+            </option>
+          }
+
+        </select>
+      </label>
+
+      <label>
+        Explanation target
+
+        <select [(ngModel)]="targetClass"
+                (ngModelChange)="clearResult()"
+                [disabled]="loading()">
+
+          <option value="auto">
+            Predicted family (automatic)
+          </option>
+
+          @for (family of families; track family.id) {
+            <option [value]="family.id">
+              {{ family.name }}
+            </option>
+          }
+
+        </select>
+      </label>
+
+      <label>
+        Number of features
+
+        <select [(ngModel)]="topN"
+                (ngModelChange)="clearResult()"
+                [disabled]="loading()">
+
+          <option [ngValue]="5">Top 5 features</option>
+          <option [ngValue]="10">Top 10 features</option>
+          <option [ngValue]="20">Top 20 features</option>
+          <option [ngValue]="36">All 36 features</option>
+
+        </select>
+      </label>
+
+    </div>
+
+    <div class="controls">
+
+      <button type="button"
+              (click)="loadTemplate()"
+              [disabled]="loading() || !model()">
+        Load Feature Template
+      </button>
+
+      <button type="button"
+              (click)="clear()"
+              [disabled]="loading()">
+        Clear
+      </button>
+
+    </div>
+
+    <label for="shap-traffic-json">
+      Traffic Features (JSON)
+    </label>
+
+    <textarea
+      id="shap-traffic-json"
+      [(ngModel)]="trafficJson"
+      (ngModelChange)="clearResult(); selectedSample = ''"
+      [disabled]="loading()"
+      placeholder="Load a test sample or enter all 36 traffic features."
+      rows="13">
+    </textarea>
+
+    <button type="button"
+            class="primary full-width"
+            (click)="explain()"
+            [disabled]="loading() || !model() ||
+                        !trafficJson.trim()">
+
+      {{ loading()
+        ? 'Generating SHAP Explanation...'
+        : 'Explain Prediction' }}
+
+    </button>
+
+    @if (error()) {
+      <div class="error" role="alert">
+        {{ error() }}
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="loading-message" role="status">
+        <span class="spinner"></span>
+        Computing feature contributions...
+      </div>
+    }
+
+  </section>
 
   @if (result(); as response) {
-    <div class="result-section">
-      <div class="result-heading">
-        <div>
-          <h3>SHAP Explanation Results</h3>
-          <p>Feature-level interpretation of the Random Forest output.</p>
-        </div>
 
-        <span class="completed-badge">✓ Analysis Complete</span>
+    <section class="panel">
+
+      <h3>Prediction and Explanation Summary</h3>
+
+      <div class="metrics-grid result-metrics">
+
+        <article class="metric">
+          <small>Predicted family</small>
+          <strong>{{ response.prediction.predicted_family }}</strong>
+        </article>
+
+        <article class="metric">
+          <small>Explained family</small>
+          <strong>{{ response.explained_family }}</strong>
+        </article>
+
+        <article class="metric">
+          <small>Prediction confidence</small>
+          <strong>
+            {{ response.prediction.prediction_confidence * 100
+               | number:'1.2-2' }}%
+          </strong>
+        </article>
+
+        <article class="metric">
+          <small>Calibrated attack probability</small>
+          <strong>
+            {{ response.calibrated_attack_probability * 100
+               | number:'1.2-2' }}%
+          </strong>
+        </article>
+
+        <article class="metric">
+          <small>Raw attack probability</small>
+          <strong>
+            {{ response.prediction.raw_attack_probability * 100
+               | number:'1.2-2' }}%
+          </strong>
+        </article>
+
+        <article class="metric">
+          <small>Explained family probability</small>
+          <strong>
+            {{ response.family_explanation.target_probability * 100
+               | number:'1.2-2' }}%
+          </strong>
+        </article>
+
+        <article class="metric">
+          <small>SHAP computation time</small>
+          <strong>
+            {{ response.shap_latency_ms | number:'1.1-1' }} ms
+          </strong>
+        </article>
+
+        <article class="metric">
+          <small>Total analysis time</small>
+          <strong>
+            {{ response.total_latency_ms | number:'1.1-1' }} ms
+          </strong>
+        </article>
+
       </div>
 
-      <div class="summary-grid">
-        <div class="summary-card">
-          <span>Base Value</span>
-          <strong>
-            {{ response.explanation.base_value | number: '1.4-6' }}
-          </strong>
-          <small>Baseline model output</small>
+      @if (
+        response.explained_family !==
+        response.prediction.predicted_family
+      ) {
+        <div class="notice">
+          The selected explanation target differs from
+          the predicted family. This does not change the prediction.
         </div>
+      }
 
-        <div class="summary-card">
-          <span>SHAP Contributions Sum</span>
-          <strong>
-            {{ response.explanation.shap_values_sum | number: '1.4-6' }}
-          </strong>
-          <small>Sum of feature contributions</small>
-        </div>
+      <p class="muted">
+        Model: {{ response.model_version }}
+      </p>
 
-        <div class="summary-card">
-          <span>Explained Class</span>
-          <strong class="explained-class">
-            {{ response.explanation.explained_class | uppercase }}
-          </strong>
-          <small>Target class for explanation</small>
-        </div>
-      </div>
+      <p class="muted">
+        Method: {{ response.explanation_method }}
+      </p>
 
-      <div class="features-section">
-        <div class="features-heading">
-          <div>
-            <h3>Top Influential Features</h3>
-            <p>Ranked feature contributions for the analyzed traffic record.</p>
+    </section>
+
+    <section class="panel">
+
+      <h3>Class Probability Distribution</h3>
+
+      <p class="muted">
+        Original, uncalibrated family probabilities.
+      </p>
+
+      @for (row of probabilityRows(); track row.family) {
+
+        <div class="probability-row">
+
+          <div class="probability-label">
+            <span>{{ row.family }}</span>
+            <strong>
+              {{ row.probability * 100 | number:'1.2-2' }}%
+            </strong>
           </div>
 
-          <span class="feature-count"> {{ topFeatures.length }} Features </span>
-        </div>
-
-        <div class="legend">
-          <span class="legend-item">
-            <span class="legend-dot attack-dot"></span>
-            Toward Attack
-          </span>
-
-          <span class="legend-item">
-            <span class="legend-dot normal-dot"></span>
-            Toward Normal
-          </span>
-
-          <span class="legend-item">
-            <span class="legend-dot neutral-dot"></span>
-            Neutral
-          </span>
-        </div>
-
-        <div class="features-list">
-          @for (feature of topFeatures; track feature.feature) {
-            <div class="feature-card">
-              <div class="feature-header">
-                <strong>{{ feature.feature }}</strong>
-
-                <span
-                  class="impact"
-                  [class.attack]="feature.impact === 'toward_attack'"
-                  [class.normal]="feature.impact === 'toward_normal'"
-                  [class.neutral]="feature.impact === 'neutral'"
-                >
-                  {{
-                    feature.impact === 'toward_attack'
-                      ? '↑ Toward Attack'
-                      : feature.impact === 'toward_normal'
-                        ? '↓ Toward Normal'
-                        : 'Neutral'
-                  }}
-                </span>
-              </div>
-
-              <div class="feature-details">
-                <span>
-                  Feature Value:
-                  <strong>
-                    {{ feature.feature_value | number: '1.2-4' }}
-                  </strong>
-                </span>
-
-                <span>
-                  SHAP:
-                  <strong>
-                    {{ feature.shap_value | number: '1.5-6' }}
-                  </strong>
-                </span>
-              </div>
-
-              <div class="bar-background">
-                <div
-                  class="contribution-bar"
-                  [class.attack]="feature.impact === 'toward_attack'"
-                  [class.normal]="feature.impact === 'toward_normal'"
-                  [class.neutral]="feature.impact === 'neutral'"
-                  [style.width.%]="getBarWidth(feature.shap_value)"
-                ></div>
-              </div>
+          <div class="probability-track">
+            <div class="probability-fill"
+                 [class.selected]="
+                   row.family === response.prediction.predicted_family
+                 "
+                 [style.width.%]="row.probability * 100">
             </div>
-          } @empty {
-            <div class="empty-state">No feature contributions available.</div>
-          }
+          </div>
+
         </div>
 
-        <div class="features-footer">
-          Bar lengths represent relative absolute SHAP magnitude among the displayed features, not
-          attack probability.
-        </div>
+      }
+
+    </section>
+
+    <app-shap-contributions
+      [heading]="'Attack Family Explanation: ' +
+                 response.explained_family"
+      description="Feature contributions toward the selected family probability."
+      [result]="response.family_explanation" />
+
+    <app-shap-contributions
+      heading="Attack Probability Explanation"
+      description="Feature contributions toward the raw attack probability, before calibration."
+      [result]="response.attack_explanation" />
+
+    <section class="panel">
+
+      <h3>Explanation Interpretation and Safety</h3>
+
+      <div class="notice">
+        {{ response.explanation_note }}
       </div>
-    </div>
+
+      <p class="muted">
+        Positive SHAP values increase the explained target
+        probability. Negative values decrease it.
+      </p>
+
+      <p class="muted">
+        SHAP contributions are not causal evidence and
+        must not independently authorize containment.
+      </p>
+
+      <p class="muted">
+        Context-aware risk scores are calculated separately
+        using device criticality, attack impact and exposure.
+      </p>
+
+      <p class="muted">
+        BruteForce has no independent validation samples
+        in the current capture split.
+      </p>
+
+    </section>
+
   }
+
 </section>

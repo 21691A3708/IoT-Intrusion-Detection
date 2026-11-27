@@ -17,6 +17,9 @@ from .response_policy_service import (
 from .context_risk_service import (
     assess_traffic_risk,
 )
+from .context_comparison_service import (
+    compare_traffic_contexts,
+)
 
 from .device_context_service import (
     list_device_profiles,
@@ -356,6 +359,46 @@ def multiclass_risk_assessment(
 # --------------------------------------------------
 # RESPONSE POLICY INFORMATION
 # --------------------------------------------------
+
+# --------------------------------------------------
+# DEVICE CONTEXT COMPARISON
+# --------------------------------------------------
+
+@router.post("/compare-contexts")
+def multiclass_context_comparison(
+    request: PredictionRequest,
+):
+
+    try:
+
+        result = compare_traffic_contexts(
+            features=request.features,
+        )
+
+        return {
+            **result,
+            "source": request.source,
+        }
+
+    except (ValueError, OverflowError) as error:
+
+        raise HTTPException(
+            status_code=422,
+            detail=str(error),
+        ) from error
+
+    except Exception as error:
+
+        logger.exception(
+            "Device context comparison failed."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Device context comparison failed.",
+        ) from error
+
+
 
 @router.get("/response-policy")
 def response_policy_information():

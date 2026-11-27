@@ -1,13 +1,49 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <title>Frontend</title>
-  <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+    <meta charset="utf-8">
+
+    <title>IoT Sentinel | Intelligent Network Security</title>
+
+    <base href="/">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <meta name="description"
+          content="Explainable and risk-aware IoT intrusion detection and controlled incident response framework.">
+
+    <meta name="theme-color"
+          content="#0f172a">
+
+    <link rel="icon"
+          type="image/svg+xml"
+          href="favicon.svg">
+
+<style>
+#startup-loader { position: fixed; inset: 0; z-index: 9999; display: grid; place-content: center; justify-items: center; gap: 16px; background: #080e19; color: #e2e8f0; font: 16px 'Segoe UI', sans-serif; text-align: center; padding: 24px; }
+#startup-loader img { width: 76px; height: 76px; }
+#startup-loader strong { font-size: 26px; }
+#startup-loader p { color: #a4b5ca; margin: 0; }
+.startup-spinner { width: 32px; height: 32px; border: 3px solid #25364b; border-top-color: #38bdf8; border-radius: 50%; animation: startup-spin .9s linear infinite; }
+@keyframes startup-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .startup-spinner { animation: none; } }
+</style>
 </head>
+
 <body>
-  <app-root></app-root>
+
+    <div id="startup-loader" role="status" aria-live="polite">
+  <img src="favicon.svg" alt="">
+  <strong>IoT Sentinel</strong>
+  <div class="startup-spinner" aria-hidden="true"></div>
+  <p id="startup-message">Initializing security platform…</p>
+</div>
+<app-root></app-root>
+<noscript>JavaScript is required to run IoT Sentinel.</noscript>
+
 </body>
+
 </html>

@@ -1,0 +1,74 @@
+{
+  "source": "context_regression_86e2f832c822471ab25b38c65b8fb346",
+  "model_version": "multiclass_rf_v3_calibrated",
+  "samples_verified": 7,
+  "context_assessments_verified": 42,
+  "invalid_cases_rejected": 4,
+  "persistent_counts_before": {
+    "incidents": 7,
+    "responses": 9
+  },
+  "persistent_counts_after": {
+    "incidents": 7,
+    "responses": 9
+  },
+  "persistent_counts_unchanged": true,
+  "results": [
+    {
+      "sample_family": "benign",
+      "predicted_family": "Benign",
+      "highest_risk": 63.35631386488959,
+      "lowest_risk": 34.13680132571659,
+      "risk_difference": 29.219512539173003,
+      "contexts_verified": 6
+    },
+    {
+      "sample_family": "ddos",
+      "predicted_family": "DDoS",
+      "highest_risk": 89.99804910748719,
+      "lowest_risk": 51.998872817659255,
+      "risk_difference": 37.999176289827936,
+      "contexts_verified": 6
+    },
+    {
+      "sample_family": "dos",
+      "predicted_family": "DoS",
+      "highest_risk": 83.99869373601308,
+      "lowest_risk": 45.99951744618516,
+      "risk_difference": 37.99917628982792,
+      "contexts_verified": 6
+    },
+    {
+      "sample_family": "reconnaissance",
+      "predicted_family": "Reconnaissance",
+      "highest_risk": 69.99848263915669,
+      "lowest_risk": 31.999306349328773,
+      "risk_difference": 37.999176289827915,
+      "contexts_verified": 6
+    },
+    {
+      "sample_family": "spoofing",
+      "predicted_family": "Benign",
+      "highest_risk": 30.820229718516828,
+      "lowest_risk": 14.8562483432123,
+      "risk_difference": 15.963981375304527,
+      "contexts_verified": 6
+    },
+    {
+      "sample_family": "mirai",
+      "predicted_family": "Mirai",
+      "highest_risk": 91.99800575432022,
+      "lowest_risk": 53.9988294644923,
+      "risk_difference": 37.999176289827915,
+      "contexts_verified": 6
+    },
+    {
+      "sample_family": "webbased",
+      "predicted_family": "WebBased",
+      "highest_risk": 84.1409300432667,
+      "lowest_risk": 46.88309210972536,
+      "risk_difference": 37.257837933541346,
+      "contexts_verified": 6
+    }
+  ]
+}
